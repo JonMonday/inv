@@ -1,0 +1,516 @@
+erDiagram
+
+%% =========================================================
+%% SECURITY / RBAC (Permissions)
+%% =========================================================
+USER ||--o{ USER_ROLE : has
+ROLE ||--o{ USER_ROLE : assigned
+
+PERMISSION ||--o{ ROLE_PERMISSION : granted_to_role
+ROLE ||--o{ ROLE_PERMISSION : grants
+
+USER ||--o{ USER_PERMISSION : override
+PERMISSION ||--o{ USER_PERMISSION : override
+
+ACCESS_SCOPE_TYPE ||--o{ ROLE_PERMISSION_SCOPE : scope_type
+ROLE_PERMISSION ||--o{ ROLE_PERMISSION_SCOPE : scope
+DEPARTMENT ||--o{ ROLE_PERMISSION_SCOPE : dept_scope
+WAREHOUSE ||--o{ ROLE_PERMISSION_SCOPE : warehouse_scope
+
+USER ||--o{ USER_DEPARTMENT : belongs
+DEPARTMENT ||--o{ USER_DEPARTMENT : contains
+
+SECURITY_EVENT_TYPE ||--o{ SECURITY_AUDIT_EVENT : typed
+USER ||--o{ SECURITY_AUDIT_EVENT : actor
+USER ||--o{ SECURITY_AUDIT_EVENT : target_user
+ROLE ||--o{ SECURITY_AUDIT_EVENT : target_role
+PERMISSION ||--o{ SECURITY_AUDIT_EVENT : target_permission
+
+USER {
+  bigint UserId PK
+  string Username "unique"
+  string Email
+  string DisplayName
+  bool IsActive
+  datetime CreatedAt
+}
+
+DEPARTMENT {
+  bigint DepartmentId PK
+  string Name "unique"
+  bool IsActive
+}
+
+USER_DEPARTMENT {
+  bigint UserDepartmentId PK
+  bigint UserId FK
+  bigint DepartmentId FK
+  bool IsPrimary
+  datetime AssignedAt
+}
+
+ROLE {
+  bigint RoleId PK
+  string Name "unique"
+  bool IsActive
+}
+
+USER_ROLE {
+  bigint UserRoleId PK
+  bigint UserId FK
+  bigint RoleId FK
+  datetime AssignedAt
+}
+
+PERMISSION {
+  bigint PermissionId PK
+  string Code "unique"
+  string Name
+  string Description
+  bool IsActive
+}
+
+ROLE_PERMISSION {
+  bigint RolePermissionId PK
+  bigint RoleId FK
+  bigint PermissionId FK
+  datetime GrantedAt
+  bigint GrantedByUserId FK "nullable"
+}
+
+USER_PERMISSION {
+  bigint UserPermissionId PK
+  bigint UserId FK
+  bigint PermissionId FK
+  bool IsGranted
+  string Reason "nullable"
+  datetime SetAt
+  bigint SetByUserId FK "nullable"
+}
+
+ACCESS_SCOPE_TYPE {
+  bigint AccessScopeTypeId PK
+  string Code "unique" 
+  string Name
+}
+
+ROLE_PERMISSION_SCOPE {
+  bigint RolePermissionScopeId PK
+  bigint RolePermissionId FK
+  bigint AccessScopeTypeId FK
+  bigint DepartmentId FK "nullable"
+  bigint WarehouseId FK "nullable"
+}
+
+SECURITY_EVENT_TYPE {
+  bigint SecurityEventTypeId PK
+  string Code "unique"
+  string Name
+}
+
+SECURITY_AUDIT_EVENT {
+  bigint SecurityAuditEventId PK
+  bigint SecurityEventTypeId FK
+  bigint ActorUserId FK
+  bigint TargetUserId FK "nullable"
+  bigint TargetRoleId FK "nullable"
+  bigint TargetPermissionId FK "nullable"
+  string DetailsJson "nullable"
+  datetime CreatedAt
+}
+
+%% =========================================================
+%% INVENTORY CATALOG + WAREHOUSES + CURRENT STOCK SNAPSHOT
+%% =========================================================
+CATEGORY ||--o{ CATEGORY : parent_of
+CATEGORY ||--o{ PRODUCT : groups
+
+WAREHOUSE ||--o{ STOCK_LEVEL : tracks
+PRODUCT ||--o{ STOCK_LEVEL : tracked_in
+
+CATEGORY {
+  bigint CategoryId PK
+  string Name "unique"
+  bigint ParentCategoryId FK "nullable"
+  bool IsActive
+}
+
+PRODUCT {
+  bigint ProductId PK
+  string SKU "unique"
+  string Name
+  bigint CategoryId FK
+  string UnitOfMeasure
+  bool IsActive
+}
+
+WAREHOUSE {
+  bigint WarehouseId PK
+  string Name "unique"
+  string Location "nullable"
+  bool IsActive
+}
+
+STOCK_LEVEL {
+  bigint WarehouseId PK,FK
+  bigint ProductId PK,FK
+  decimal OnHandQty
+  decimal ReservedQty
+  datetime UpdatedAt
+}
+
+%% =========================================================
+%% INVENTORY REQUESTS (Business object that routes through workflow)
+%% =========================================================
+INVENTORY_REQUEST_TYPE ||--o{ INVENTORY_REQUEST : defines
+INVENTORY_REQUEST_STATUS ||--o{ INVENTORY_REQUEST : status_of
+USER ||--o{ INVENTORY_REQUEST : requested_by
+WAREHOUSE ||--o{ INVENTORY_REQUEST : requested_from
+
+INVENTORY_REQUEST ||--o{ INVENTORY_REQUEST_LINE : contains
+PRODUCT ||--o{ INVENTORY_REQUEST_LINE : item
+
+WORKFLOW_INSTANCE ||--|| INVENTORY_REQUEST : routes_request
+
+INVENTORY_REQUEST_TYPE {
+  bigint RequestTypeId PK
+  string Code "unique"  
+  string Name
+  bool IsActive
+}
+
+INVENTORY_REQUEST_STATUS {
+  bigint RequestStatusId PK
+  string Code "unique"   
+  string Name
+  bool IsTerminal
+}
+
+INVENTORY_REQUEST {
+  bigint RequestId PK
+  string RequestNo "unique"
+  bigint RequestTypeId FK
+  bigint RequestStatusId FK
+  bigint WarehouseId FK
+  bigint RequestedByUserId FK
+  datetime RequestedAt
+  string Notes "nullable"
+  bigint WorkflowInstanceId FK "unique, nullable until submitted"
+}
+
+INVENTORY_REQUEST_LINE {
+  bigint RequestLineId PK
+  bigint RequestId FK
+  bigint ProductId FK
+  decimal QtyRequested
+  decimal QtyApproved "nullable"
+  decimal QtyFulfilled "nullable"
+  string LineNotes "nullable"
+}
+
+%% =========================================================
+%% WORKFLOW TEMPLATE (Definition / Versioned)
+%% =========================================================
+WORKFLOW_DEFINITION ||--o{ WORKFLOW_DEFINITION_VERSION : versions
+WORKFLOW_DEFINITION_VERSION ||--o{ WORKFLOW_STEP : steps
+WORKFLOW_STEP_TYPE ||--o{ WORKFLOW_STEP : typed_as
+
+WORKFLOW_STEP ||--|| WORKFLOW_STEP_RULE : has_rule
+WORKFLOW_ASSIGNMENT_MODE ||--o{ WORKFLOW_STEP_RULE : assignment_mode
+ROLE ||--o{ WORKFLOW_STEP_RULE : role_filter
+DEPARTMENT ||--o{ WORKFLOW_STEP_RULE : department_filter
+
+WORKFLOW_DEFINITION_VERSION ||--o{ WORKFLOW_TRANSITION : routes
+WORKFLOW_STEP ||--o{ WORKFLOW_TRANSITION : from_step
+WORKFLOW_STEP ||--o{ WORKFLOW_TRANSITION : to_step
+WORKFLOW_ACTION_TYPE ||--o{ WORKFLOW_TRANSITION : action
+
+WORKFLOW_TRANSITION ||--o{ WORKFLOW_TRANSITION_CONDITION : conditions
+WORKFLOW_CONDITION_OPERATOR ||--o{ WORKFLOW_TRANSITION_CONDITION : op
+
+USER ||--o{ WORKFLOW_DEFINITION : created_by
+USER ||--o{ WORKFLOW_DEFINITION_VERSION : published_by
+
+WORKFLOW_DEFINITION {
+  bigint WorkflowDefinitionId PK
+  string Code "unique"
+  string Name
+  bool IsActive
+  bigint CreatedByUserId FK
+  datetime CreatedAt
+}
+
+WORKFLOW_DEFINITION_VERSION {
+  bigint WorkflowDefinitionVersionId PK
+  bigint WorkflowDefinitionId FK
+  int VersionNo
+  bool IsActive
+  datetime PublishedAt "nullable"
+  bigint PublishedByUserId FK "nullable"
+}
+
+WORKFLOW_STEP_TYPE {
+  bigint WorkflowStepTypeId PK
+  string Code "unique"  
+  string Name
+}
+
+WORKFLOW_STEP {
+  bigint WorkflowStepId PK
+  bigint WorkflowDefinitionVersionId FK
+  string StepKey
+  string Name
+  bigint WorkflowStepTypeId FK
+  int SequenceNo "nullable"
+  bool IsActive
+}
+
+WORKFLOW_ASSIGNMENT_MODE {
+  bigint AssignmentModeId PK
+  string Code "unique" 
+  string Name
+}
+
+WORKFLOW_STEP_RULE {
+  bigint WorkflowStepId PK,FK
+  bigint AssignmentModeId FK
+  bigint RoleId FK "nullable"
+  bigint DepartmentId FK "nullable"
+  bool UseRequesterDepartment
+  bool AllowRequesterSelect
+  int MinApprovers
+  bool RequireAll
+  bool AllowReassign
+  bool AllowDelegate
+  int SLA_Minutes "nullable"
+}
+
+WORKFLOW_ACTION_TYPE {
+  bigint WorkflowActionTypeId PK
+  string Code "unique" 
+  string Name
+  bool IsDecision
+  bool IsSystemAction
+}
+
+WORKFLOW_TRANSITION {
+  bigint WorkflowTransitionId PK
+  bigint WorkflowDefinitionVersionId FK
+  bigint FromWorkflowStepId FK
+  bigint WorkflowActionTypeId FK
+  bigint ToWorkflowStepId FK "nullable"
+}
+
+WORKFLOW_CONDITION_OPERATOR {
+  bigint OperatorId PK
+  string Code "unique"   
+  string Name
+}
+
+WORKFLOW_TRANSITION_CONDITION {
+  bigint WorkflowTransitionConditionId PK
+  bigint WorkflowTransitionId FK
+  string LeftOperandPath
+  bigint OperatorId FK
+  string RightOperandValue
+  int ConditionGroup
+  int SortOrder
+}
+
+%% =========================================================
+%% WORKFLOW RUNTIME (Instance / Tasks / Assignees / Audit)
+%% =========================================================
+WORKFLOW_DEFINITION_VERSION ||--o{ WORKFLOW_INSTANCE : runs
+WORKFLOW_INSTANCE_STATUS ||--o{ WORKFLOW_INSTANCE : status_of
+USER ||--o{ WORKFLOW_INSTANCE : initiated_by
+
+WORKFLOW_INSTANCE ||--o{ WORKFLOW_TASK : has_tasks
+WORKFLOW_STEP ||--o{ WORKFLOW_TASK : for_step
+WORKFLOW_TASK_STATUS ||--o{ WORKFLOW_TASK : status_of
+USER ||--o{ WORKFLOW_TASK : claimed_by
+
+WORKFLOW_TASK ||--o{ WORKFLOW_TASK_ASSIGNEE : assignees
+WORKFLOW_TASK_ASSIGNEE_STATUS ||--o{ WORKFLOW_TASK_ASSIGNEE : assignee_status
+USER ||--o{ WORKFLOW_TASK_ASSIGNEE : user
+
+WORKFLOW_TASK ||--o{ WORKFLOW_TASK_ACTION : actions
+WORKFLOW_ACTION_TYPE ||--o{ WORKFLOW_TASK_ACTION : action_type
+USER ||--o{ WORKFLOW_TASK_ACTION : acted_by
+
+WORKFLOW_INSTANCE ||--o{ WORKFLOW_INSTANCE_HISTORY : history
+WORKFLOW_ACTION_TYPE ||--o{ WORKFLOW_INSTANCE_HISTORY : cause_action
+
+WORKFLOW_INSTANCE_STATUS {
+  bigint WorkflowInstanceStatusId PK
+  string Code "unique"
+  string Name
+  bool IsTerminal
+}
+
+WORKFLOW_INSTANCE {
+  bigint WorkflowInstanceId PK
+  bigint WorkflowDefinitionVersionId FK
+  bigint WorkflowInstanceStatusId FK
+  bigint InitiatorUserId FK
+  string BusinessEntityKey 
+  bigint CurrentWorkflowStepId FK "nullable"
+  datetime StartedAt
+  datetime CompletedAt "nullable"
+}
+
+WORKFLOW_TASK_STATUS {
+  bigint WorkflowTaskStatusId PK
+  string Code "unique"  
+  string Name
+  bool IsTerminal
+}
+
+WORKFLOW_TASK {
+  bigint WorkflowTaskId PK
+  bigint WorkflowInstanceId FK
+  bigint WorkflowStepId FK
+  bigint WorkflowTaskStatusId FK
+  datetime CreatedAt
+  datetime DueAt "nullable"
+  bigint ClaimedByUserId FK "nullable"
+  datetime CompletedAt "nullable"
+}
+
+WORKFLOW_TASK_ASSIGNEE_STATUS {
+  bigint AssigneeStatusId PK
+  string Code "unique" 
+  string Name
+}
+
+WORKFLOW_TASK_ASSIGNEE {
+  bigint WorkflowTaskAssigneeId PK
+  bigint WorkflowTaskId FK
+  bigint UserId FK
+  bigint AssigneeStatusId FK
+  datetime AssignedAt
+  datetime DecidedAt "nullable"
+}
+
+WORKFLOW_TASK_ACTION {
+  bigint WorkflowTaskActionId PK
+  bigint WorkflowTaskId FK
+  bigint WorkflowActionTypeId FK
+  bigint ActionByUserId FK
+  datetime ActionAt
+  string Notes "nullable"
+  string PayloadJson "nullable"
+}
+
+WORKFLOW_INSTANCE_HISTORY {
+  bigint WorkflowInstanceHistoryId PK
+  bigint WorkflowInstanceId FK
+  bigint FromWorkflowStepId FK "nullable"
+  bigint ToWorkflowStepId FK "nullable"
+  bigint WorkflowActionTypeId FK
+  bigint ChangedByUserId FK "nullable"
+  datetime ChangedAt
+  string Notes "nullable"
+}
+
+%% =========================================================
+%% RESERVATIONS (Fulfillment-only, created by Storekeeper)
+%% =========================================================
+RESERVATION_STATUS ||--o{ RESERVATION : status_of
+INVENTORY_REQUEST ||--o{ RESERVATION : for_request
+USER ||--o{ RESERVATION : reserved_by
+WAREHOUSE ||--o{ RESERVATION : in_warehouse
+RESERVATION ||--o{ RESERVATION_LINE : lines
+INVENTORY_REQUEST_LINE ||--o{ RESERVATION_LINE : ties_request_line
+PRODUCT ||--o{ RESERVATION_LINE : product
+
+RESERVATION_STATUS {
+  bigint ReservationStatusId PK
+  string Code "unique"  
+  string Name
+  bool IsTerminal
+}
+
+RESERVATION {
+  bigint ReservationId PK
+  string ReservationNo "unique"
+  bigint ReservationStatusId FK
+  bigint WarehouseId FK
+  bigint RequestId FK
+  bigint ReservedByUserId FK
+  datetime ReservedAt
+  datetime ExpiresAt "nullable"
+  string Notes "nullable"
+}
+
+RESERVATION_LINE {
+  bigint ReservationLineId PK
+  bigint ReservationId FK
+  bigint RequestLineId FK
+  bigint ProductId FK
+  decimal QtyReserved
+}
+
+%% =========================================================
+%% STOCK LEDGER (Append-only audit trail of all stock changes)
+%% =========================================================
+INVENTORY_MOVEMENT_TYPE ||--o{ STOCK_MOVEMENT : type_of
+INVENTORY_MOVEMENT_STATUS ||--o{ STOCK_MOVEMENT : status_of
+INVENTORY_REASON_CODE ||--o{ STOCK_MOVEMENT : reason
+
+WAREHOUSE ||--o{ STOCK_MOVEMENT : warehouse
+USER ||--o{ STOCK_MOVEMENT : created_by
+USER ||--o{ STOCK_MOVEMENT : posted_by
+
+STOCK_MOVEMENT ||--o{ STOCK_MOVEMENT_LINE : has_lines
+PRODUCT ||--o{ STOCK_MOVEMENT_LINE : product
+
+INVENTORY_REQUEST ||--o{ STOCK_MOVEMENT : referenced_request
+RESERVATION ||--o{ STOCK_MOVEMENT : referenced_reservation
+STOCK_MOVEMENT ||--o{ STOCK_MOVEMENT : reversal
+
+INVENTORY_MOVEMENT_TYPE {
+  bigint MovementTypeId PK
+  string Code "unique" 
+  string Name
+}
+
+INVENTORY_MOVEMENT_STATUS {
+  bigint MovementStatusId PK
+  string Code "unique" 
+  string Name
+  bool IsTerminal
+}
+
+INVENTORY_REASON_CODE {
+  bigint ReasonCodeId PK
+  string Code "unique"
+  string Name
+  bool RequiresApproval
+  bool IsActive
+}
+
+STOCK_MOVEMENT {
+  bigint StockMovementId PK
+  bigint MovementTypeId FK
+  bigint MovementStatusId FK
+  bigint ReasonCodeId FK
+  bigint WarehouseId FK
+  bigint ReferenceRequestId FK "nullable"
+  bigint ReferenceReservationId FK "nullable"
+  bigint CreatedByUserId FK
+  datetime CreatedAt
+  bigint PostedByUserId FK "nullable"
+  datetime PostedAt "nullable"
+  bigint ReversedMovementId FK "nullable"
+  string Notes "nullable"
+}
+
+STOCK_MOVEMENT_LINE {
+  bigint StockMovementLineId PK
+  bigint StockMovementId FK
+  bigint ProductId FK
+  decimal QtyDeltaOnHand
+  decimal QtyDeltaReserved
+  decimal UnitCost "nullable (captured on receipts later)"
+  string LineNotes "nullable"
+}
