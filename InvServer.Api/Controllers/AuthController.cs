@@ -100,7 +100,8 @@ public class AuthController : ControllerBase
                         user.Email,
                         user.DisplayName,
                         Roles = user.Roles.Select(r => r.Role.Name),
-                        Departments = user.Departments.Select(d => d.Department.Name)
+                        Departments = user.Departments.Select(d => d.Department.Name),
+                        PrimaryDepartmentId = user.Departments.FirstOrDefault(d => d.IsPrimary)?.DepartmentId
                     }
                 });
             }

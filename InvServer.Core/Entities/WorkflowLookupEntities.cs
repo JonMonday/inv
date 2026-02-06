@@ -9,12 +9,10 @@ public class WorkflowStepType
     [Key]
     public long WorkflowStepTypeId { get; set; }
 
-    [Required]
-    [MaxLength(50)]
+    [Required, MaxLength(50)]
     public string Code { get; set; } = string.Empty;
 
-    [Required]
-    [MaxLength(100)]
+    [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 }
 
@@ -24,12 +22,10 @@ public class WorkflowActionType
     [Key]
     public long WorkflowActionTypeId { get; set; }
 
-    [Required]
-    [MaxLength(50)]
+    [Required, MaxLength(50)]
     public string Code { get; set; } = string.Empty;
 
-    [Required]
-    [MaxLength(100)]
+    [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 
     public bool IsDecision { get; set; }
@@ -42,12 +38,10 @@ public class WorkflowInstanceStatus
     [Key]
     public long WorkflowInstanceStatusId { get; set; }
 
-    [Required]
-    [MaxLength(50)]
+    [Required, MaxLength(50)]
     public string Code { get; set; } = string.Empty;
 
-    [Required]
-    [MaxLength(100)]
+    [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 
     public bool IsTerminal { get; set; }
@@ -59,12 +53,10 @@ public class WorkflowTaskStatus
     [Key]
     public long WorkflowTaskStatusId { get; set; }
 
-    [Required]
-    [MaxLength(50)]
+    [Required, MaxLength(50)]
     public string Code { get; set; } = string.Empty;
 
-    [Required]
-    [MaxLength(100)]
+    [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 
     public bool IsTerminal { get; set; }
@@ -75,7 +67,11 @@ public class WorkflowAssignmentMode
 {
     [Key]
     public long AssignmentModeId { get; set; }
+
+    [Required, MaxLength(50)]
     public string Code { get; set; } = string.Empty;
+
+    [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 }
 
@@ -84,6 +80,10 @@ public class WorkflowConditionOperator
 {
     [Key]
     public long WorkflowConditionOperatorId { get; set; }
+
+    [Required, MaxLength(50)]
     public string Code { get; set; } = string.Empty;
+
+    [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 }

@@ -80,10 +80,11 @@ export function TaskDrawer({
         }
     };
 
-    const handleAction = async (action: 'APPROVE' | 'REJECT' | 'CANCEL') => {
+    const handleAction = async (action: 'APPROVE' | 'REJECT' | 'CANCEL' | 'SUBMIT') => {
         try {
+            const actualAction = (task.stepKey === 'START' && action === 'APPROVE') ? 'SUBMIT' : action;
             const payload: any = { nextAssigneeUserId: nextAssigneeId || undefined };
-            if (task.stepName === 'Fulfillment' && action === 'APPROVE') {
+            if (task.stepKey === 'FULFILL' && action === 'APPROVE') {
                 console.log('🔍 DEBUG: selectedWarehouses state:', selectedWarehouses);
                 payload.fulfillments = Object.entries(selectedWarehouses).map(([productId, warehouseId]) => ({
                     productId: Number(productId),
@@ -95,11 +96,11 @@ export function TaskDrawer({
             console.log('🔍 DEBUG: Final payload being sent:', payload);
             await actionMutation.mutateAsync({
                 taskId: task.id,
-                action,
+                action: actualAction as any,
                 notes,
                 payloadJson: JSON.stringify(payload)
             });
-            toast({ title: `Task ${action.toLowerCase()}ed successfully` });
+            toast({ title: `Task ${actualAction.toLowerCase()}ed successfully` });
             onClose();
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown error';
@@ -116,7 +117,8 @@ export function TaskDrawer({
     const isClaimedByOther = task.claimedByUserId && !isClaimedByMe;
     const canAct = !isClaimedByOther;
     const isRequester = user?.userId === task.initiatorUserId;
-    const isFulfillmentStep = task.stepName === 'Fulfillment';
+    const isFulfillmentStep = task.stepKey === 'FULFILL' || task.stepName === 'Fulfillment';
+    const isStartStep = task.stepKey === 'START';
 
     return (
         <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()} direction="right">
@@ -306,11 +308,13 @@ export function TaskDrawer({
                                     onClick={() => handleAction('APPROVE')}
                                     disabled={actionMutation.isPending || (isFulfillmentStep && isStorekeeper && fulfillmentDetails?.lines?.some((l: any) => !selectedWarehouses[l.productId]))}
                                 >
-                                    <CheckCircle2 className="mr-2 h-4 w-4" /> {isFulfillmentStep ? 'Approve & Fulfill' : 'Approve'}
+                                    <CheckCircle2 className="mr-2 h-4 w-4" /> {isFulfillmentStep ? 'Approve & Fulfill' : (isStartStep ? 'Submit Request' : 'Approve')}
                                 </Button>
-                                <Button variant="outline" onClick={() => handleAction('REJECT')} disabled={actionMutation.isPending}>
-                                    <XCircle className="mr-2 h-4 w-4" /> Reject
-                                </Button>
+                                {!isStartStep && (
+                                    <Button variant="outline" onClick={() => handleAction('REJECT')} disabled={actionMutation.isPending}>
+                                        <XCircle className="mr-2 h-4 w-4" /> Reject
+                                    </Button>
+                                )}
                                 {isRequester && (
                                     <Button variant="ghost" className="col-span-2 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleAction('CANCEL')} disabled={actionMutation.isPending}>
                                         <Ban className="mr-2 h-4 w-4" /> Cancel Request

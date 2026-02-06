@@ -177,16 +177,6 @@ public class InventoryController : ControllerBase
         var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!long.TryParse(userIdStr, out var userId)) return Unauthorized();
 
-        long? definitionId = dto.WorkflowTemplateId;
-        if (dto.WorkflowVersionId.HasValue)
-        {
-            var version = await _db.WorkflowDefinitionVersions
-                .Where(v => v.WorkflowDefinitionVersionId == dto.WorkflowVersionId.Value)
-                .Select(v => v.WorkflowDefinitionId)
-                .FirstOrDefaultAsync();
-            if (version != 0) definitionId = version;
-        }
-
         var request = new InventoryRequest
         {
             RequestNo = $"REQ-{DateTime.UtcNow.Ticks}",
@@ -196,7 +186,7 @@ public class InventoryController : ControllerBase
             DepartmentId = dto.DepartmentId,
             RequestedByUserId = userId,
             RequestedAt = DateTime.UtcNow,
-            WorkflowDefinitionId = definitionId,
+            WorkflowTemplateId = dto.WorkflowTemplateId,
             Notes = dto.Notes
         };
 
@@ -229,20 +219,10 @@ public class InventoryController : ControllerBase
         if (request.RequestStatusId != draftStatusId)
             return BadRequest(new ApiErrorResponse { Message = "Only draft requests can be updated." });
 
-        long? definitionId = dto.WorkflowTemplateId;
-        if (dto.WorkflowVersionId.HasValue)
-        {
-            var version = await _db.WorkflowDefinitionVersions
-                .Where(v => v.WorkflowDefinitionVersionId == dto.WorkflowVersionId.Value)
-                .Select(v => v.WorkflowDefinitionId)
-                .FirstOrDefaultAsync();
-            if (version != 0) definitionId = version;
-        }
-
         request.RequestTypeId = dto.RequestTypeId;
         request.WarehouseId = dto.WarehouseId;
         request.DepartmentId = dto.DepartmentId;
-        request.WorkflowDefinitionId = definitionId;
+        request.WorkflowTemplateId = dto.WorkflowTemplateId;
         request.Notes = dto.Notes;
 
         // Sync lines
@@ -304,7 +284,7 @@ public class InventoryController : ControllerBase
     {
         var request = await _db.InventoryRequests
             .Include(r => r.Lines)
-            .Include(r => r.WorkflowDefinition)
+            .Include(r => r.WorkflowTemplate)
             .FirstOrDefaultAsync(r => r.RequestId == requestId);
 
         if (request == null) return NotFound();
@@ -316,9 +296,15 @@ public class InventoryController : ControllerBase
         var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         long.TryParse(userIdStr, out var userId);
 
-        var workflowCode = request.WorkflowDefinition?.Code ?? "INV_REQ_FLOW";
-        var instanceId = await _workflowEngine.StartWorkflowAsync(workflowCode, $"INV_REQ:{request.RequestId}", userId, dto?.ManualAssignments);
-        
+        var workflowCode = request.WorkflowTemplate?.Code ?? "INV_REQ_FLOW";
+        var instanceId = await _workflowEngine.StartWorkflowAsync(
+            request.WorkflowTemplateId!.Value,
+            $"INV_REQ:{request.RequestId}",
+            userId,
+            dto?.ManualAssignments
+        );
+
+
         request.WorkflowInstanceId = instanceId;
         request.RequestStatusId = await GetStatusIdAsync("INVENTORY_REQUEST_STATUS", RequestStatusCodes.InWorkflow);
 
@@ -329,7 +315,9 @@ public class InventoryController : ControllerBase
         var task = await _db.WorkflowTasks
             .Include(t => t.WorkflowStep)
             .Where(t => t.WorkflowInstanceId == instanceId && 
-                       (t.WorkflowStep.StepKey == WorkflowStepTypeCodes.Start || t.WorkflowStep.StepKey == "START"))
+                       (t.WorkflowStep.StepKey == WorkflowStepTypeCodes.Start || 
+                        t.WorkflowStep.StepKey == "START" || 
+                        t.WorkflowStep.StepKey == "SUBMISSION"))
             .FirstOrDefaultAsync();
 
         if (task != null)
@@ -519,7 +507,17 @@ public class InventoryController : ControllerBase
     }
 }
 
-public record InventoryRequestDto(long RequestTypeId, long WarehouseId, long DepartmentId, string? Notes, long? WorkflowTemplateId, List<InventoryRequestLineDto> Lines, List<WorkflowManualAssignmentDto>? ManualAssignments = null, long? WorkflowVersionId = null);
+public record InventoryRequestDto(
+    long RequestTypeId,
+    long WarehouseId,
+    long DepartmentId,
+    string? Notes,
+    long? WorkflowTemplateId,
+    List<InventoryRequestLineDto> Lines,
+    List<WorkflowManualAssignmentDto>? ManualAssignments = null
+);
+
+
 public record InventoryRequestLineDto(long ProductId, decimal Quantity);
 public record SubmitRequestDto(List<WorkflowManualAssignmentDto>? ManualAssignments);
 

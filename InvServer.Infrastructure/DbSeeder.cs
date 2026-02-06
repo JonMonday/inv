@@ -1,7 +1,6 @@
 using InvServer.Core.Entities;
 using InvServer.Core.Constants;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
 
 namespace InvServer.Infrastructure;
 
@@ -54,7 +53,6 @@ public static class DbSeeder
         // ==============================================================================
         // 3. Lookup Tables
         // ==============================================================================
-        // Inventory Request Types
         if (!await context.InventoryRequestTypes.AnyAsync())
         {
             context.InventoryRequestTypes.AddRange(
@@ -64,7 +62,6 @@ public static class DbSeeder
             );
         }
 
-        // Security Event Types
         if (!await context.SecurityEventTypes.AnyAsync())
         {
             context.SecurityEventTypes.AddRange(
@@ -77,7 +74,7 @@ public static class DbSeeder
         }
 
         // Workflow Lookups
-        // Re-seed if new modes (ROLE) are missing. This handles migration from old ANY/ALL modes.
+        // Re-seed if new modes (ROLE) are missing. Handles migration from old ANY/ALL modes.
         if (!await context.WorkflowAssignmentModes.AnyAsync(m => m.Code == WorkflowAssignmentModeCodes.Role))
         {
             var oldModes = await context.WorkflowAssignmentModes.ToListAsync();
@@ -94,6 +91,7 @@ public static class DbSeeder
                 new WorkflowAssignmentMode { Code = WorkflowAssignmentModeCodes.RequestorRoleAndDepartment, Name = "Requestor Role and Department" }
             );
         }
+
         if (!await context.WorkflowConditionOperators.AnyAsync())
         {
             context.WorkflowConditionOperators.AddRange(
@@ -103,6 +101,7 @@ public static class DbSeeder
                 new WorkflowConditionOperator { Code = "CONTAINS", Name = "Contains" }
             );
         }
+
         if (!await context.WorkflowTaskAssigneeStatuses.AnyAsync())
         {
             context.WorkflowTaskAssigneeStatuses.AddRange(
@@ -111,6 +110,7 @@ public static class DbSeeder
                 new WorkflowTaskAssigneeStatus { Code = "REJECTED", Name = "Rejected" }
             );
         }
+
         if (!await context.WorkflowInstanceStatuses.AnyAsync())
         {
             context.WorkflowInstanceStatuses.AddRange(
@@ -136,7 +136,6 @@ public static class DbSeeder
             );
         }
 
-        // Workflow Step Types
         if (!await context.WorkflowStepTypes.AnyAsync())
         {
             context.WorkflowStepTypes.AddRange(
@@ -148,7 +147,6 @@ public static class DbSeeder
             );
         }
 
-        // Workflow Action Types
         if (!await context.WorkflowActionTypes.AnyAsync())
         {
             context.WorkflowActionTypes.AddRange(
@@ -161,7 +159,6 @@ public static class DbSeeder
             );
         }
 
-        // Inventory Movement Types
         if (!await context.InventoryMovementTypes.AnyAsync())
         {
             context.InventoryMovementTypes.AddRange(
@@ -177,7 +174,6 @@ public static class DbSeeder
             );
         }
 
-        // Inventory Movement Statuses
         if (!await context.InventoryMovementStatuses.AnyAsync())
         {
             context.InventoryMovementStatuses.AddRange(
@@ -201,7 +197,6 @@ public static class DbSeeder
             );
         }
 
-        // Access Scope Types
         if (!await context.AccessScopeTypes.AnyAsync())
         {
             context.AccessScopeTypes.AddRange(
@@ -212,6 +207,8 @@ public static class DbSeeder
             );
             await context.SaveChangesAsync();
         }
+
+        await context.SaveChangesAsync();
 
         // ==============================================================================
         // 3a. Inventory Catalog
@@ -235,19 +232,21 @@ public static class DbSeeder
             categories = await context.Categories.ToListAsync();
         }
 
+        var categoryByName = categories.ToDictionary(c => c.Name, c => c.CategoryId);
+
         var products = new List<Product>();
         if (!await context.Products.AnyAsync())
         {
             products.AddRange(new[]
             {
-                new Product { SKU = "PPE-001", Name = "Safety Helmet (Yellow)", CategoryId = categories[0].CategoryId, UnitOfMeasure = "PCS" },
-                new Product { SKU = "PPE-002", Name = "High-Vis Vest (XL)", CategoryId = categories[0].CategoryId, UnitOfMeasure = "PCS" },
-                new Product { SKU = "IT-001", Name = "Dell Latitude 5420", CategoryId = categories[1].CategoryId, UnitOfMeasure = "PCS" },
-                new Product { SKU = "IT-002", Name = "Logitech MX Master 3", CategoryId = categories[1].CategoryId, UnitOfMeasure = "PCS" },
-                new Product { SKU = "NET-001", Name = "Cisco Catalyst 9200L", CategoryId = categories[2].CategoryId, UnitOfMeasure = "PCS" },
-                new Product { SKU = "OFF-001", Name = "A4 Paper Ream (80gsm)", CategoryId = categories[3].CategoryId, UnitOfMeasure = "REAM" },
-                new Product { SKU = "OFF-002", Name = "Stapler (Heavy Duty)", CategoryId = categories[3].CategoryId, UnitOfMeasure = "PCS" },
-                new Product { SKU = "CLN-001", Name = "Sanitizer 5L", CategoryId = categories[4].CategoryId, UnitOfMeasure = "BTL" }
+                new Product { SKU = "PPE-001", Name = "Safety Helmet (Yellow)", CategoryId = categoryByName["PPE & Safety"], UnitOfMeasure = "PCS" },
+                new Product { SKU = "PPE-002", Name = "High-Vis Vest (XL)", CategoryId = categoryByName["PPE & Safety"], UnitOfMeasure = "PCS" },
+                new Product { SKU = "IT-001", Name = "Dell Latitude 5420", CategoryId = categoryByName["Office Equipment"], UnitOfMeasure = "PCS" },
+                new Product { SKU = "IT-002", Name = "Logitech MX Master 3", CategoryId = categoryByName["Office Equipment"], UnitOfMeasure = "PCS" },
+                new Product { SKU = "NET-001", Name = "Cisco Catalyst 9200L", CategoryId = categoryByName["Networking Hardware"], UnitOfMeasure = "PCS" },
+                new Product { SKU = "OFF-001", Name = "A4 Paper Ream (80gsm)", CategoryId = categoryByName["Stationery"], UnitOfMeasure = "REAM" },
+                new Product { SKU = "OFF-002", Name = "Stapler (Heavy Duty)", CategoryId = categoryByName["Stationery"], UnitOfMeasure = "PCS" },
+                new Product { SKU = "CLN-001", Name = "Sanitizer 5L", CategoryId = categoryByName["Cleaning Supplies"], UnitOfMeasure = "BTL" }
             });
             context.Products.AddRange(products);
             await context.SaveChangesAsync();
@@ -268,45 +267,45 @@ public static class DbSeeder
             "role.read", "role.create", "role.update", "role.deactivate",
             "permission.read", "permission.create", "permission.update", "permission.deactivate",
             "role_permission.grant", "role_permission.revoke", "role_permission_scope.manage",
-            
+
             // Org & Locations
             "department.read", "department.create", "department.update", "department.deactivate",
             "warehouse.read", "warehouse.create", "warehouse.update", "warehouse.deactivate",
-            
+
             // Inventory Setup (Catalog)
             "category.read", "category.create", "category.update", "category.deactivate",
             "product.read", "product.create", "product.update", "product.deactivate",
             "stock_level.read",
-            
+
             // Inventory Requests
-            "inventory_request.read", "inventory_request.create", "inventory_request.update_draft", 
-            "inventory_request.delete_draft", "inventory_request.submit", "inventory_request.cancel", 
+            "inventory_request.read", "inventory_request.create", "inventory_request.update_draft",
+            "inventory_request.delete_draft", "inventory_request.submit", "inventory_request.cancel",
             "inventory_request.comment",
             "inventory_request.review_pass", "inventory_request.review_return", "inventory_request.review_comment",
             "inventory_request.approve", "inventory_request.reject", "inventory_request.send_back", "inventory_request.set_line_qty_approved",
-            
+
             // Reservations
             "reservation.read", "reservation.create", "reservation.update", "reservation.extend", "reservation.cancel", "reservation.release",
-            
+
             // Stock Movements
-            "stock_movement.read", "stock_movement.create", "stock_movement.update", "stock_movement.post", 
+            "stock_movement.read", "stock_movement.create", "stock_movement.update", "stock_movement.post",
             "stock_movement.reverse", "stock_movement.set_unit_cost",
             "stock_movement.adjustment.create", "stock_movement.adjustment.post",
-            
+
             // Lookups & Config
             "lookup.inventory_request_status.manage", "lookup.inventory_request_type.manage",
             "lookup.reservation_status.manage", "lookup.inventory_movement_type.manage",
             "lookup.inventory_movement_status.manage", "lookup.inventory_reason_code.manage",
             "lookup.workflow_task_assignee_status.manage",
-            
-            // Workflow Definitions
-            "workflow_definition.read", "workflow_definition.create", "workflow_definition.update", "workflow_definition.deactivate",
-            "workflow_definition_version.publish",
+
+            // Workflow Templates
+            "workflow_template.read", "workflow_template.create", "workflow_template.update", "workflow_template.deactivate",
             "workflow_step.manage", "workflow_step_rule.manage", "workflow_transition.manage",
+            "workflow_task.read_my","workflow_task.read_all","workflow_task.claim","workflow_task.action","workflow_task.read_eligible_assignees",
             "workflow_lookup.step_type.manage", "workflow_lookup.action_type.manage",
             "workflow_lookup.instance_status.manage", "workflow_lookup.task_status.manage",
             "workflow_lookup.assignment_mode.manage", "workflow_lookup.condition_operator.manage",
-            
+
             // System / Audit / Idempotency
             "audit_log.read", "audit_log.export",
             "security_event_type.manage",
@@ -320,11 +319,11 @@ public static class DbSeeder
         {
             if (!existingPerms.ContainsKey(code))
             {
-                var p = new Permission 
-                { 
-                    Code = code, 
-                    Name = ToHumanName(code), 
-                    IsActive = true 
+                var p = new Permission
+                {
+                    Code = code,
+                    Name = ToHumanName(code),
+                    IsActive = true
                 };
                 context.Permissions.Add(p);
                 allPerms.Add(p);
@@ -336,7 +335,6 @@ public static class DbSeeder
         }
         await context.SaveChangesAsync();
 
-        // Reload perms to get IDs
         allPerms = await context.Permissions.ToListAsync();
 
         // ==============================================================================
@@ -366,87 +364,149 @@ public static class DbSeeder
             roles.Add(role);
         }
         await context.SaveChangesAsync();
-        
-        // Reload roles
+
         roles = await context.Roles.ToListAsync();
+        Role GetRole(string code) => roles.First(r => r.Code == code);
 
         // ==============================================================================
-        // 6. Role Permissions Assignment
+        // 6. Role Permissions Assignment (UPDATED: workflow_template + workflow_task perms)
         // ==============================================================================
-        // Helper to get Role by code
-        Role GetRole(string code) => roles.First(r => r.Code == code);
-        
-        // SuperAdmin & Admin -> All Permissions
         await AssignPermissionsToRole(context, GetRole("SUPERADMIN"), allPerms, "GLOBAL");
         await AssignPermissionsToRole(context, GetRole("ADMIN"), allPerms, "GLOBAL");
 
-        // Auditor -> Read Only
-        var readPerms = allPerms.Where(p => p.Code.EndsWith(".read") || p.Code.StartsWith("audit_log")).ToList();
-        await AssignPermissionsToRole(context, GetRole("AUDITOR"), readPerms, "GLOBAL");
+        // Small helper sets (avoid repeating strings everywhere)
+        var workflowRuntimePerms = allPerms.Where(p =>
+            p.Code == "workflow_task.read_my" ||
+            p.Code == "workflow_task.claim" ||
+            p.Code == "workflow_task.action" ||
+            p.Code == "workflow_task.read_eligible_assignees"
+        ).ToList();
 
-        // Manager -> Requests, Teams, Reports
-        var managerPerms = allPerms.Where(p => 
-            p.Code.StartsWith("user.") || 
-            p.Code.StartsWith("inventory_request.") || 
-            p.Code.StartsWith("department.")).ToList();
-        await AssignPermissionsToRole(context, GetRole("MANAGER"), managerPerms, "GLOBAL"); // Should be DEPT in real app
+        var workflowTemplateReadPerms = allPerms.Where(p =>
+            p.Code == "workflow_template.read"
+        ).ToList();
 
-        // Storekeeper -> Stock, Reservations, Products, and view Requests
-        var storePerms = allPerms.Where(p => 
-            p.Code.StartsWith("stock_") || 
+        var workflowAdminPerms = allPerms.Where(p =>
+            p.Code.StartsWith("workflow_template.") ||
+            p.Code.StartsWith("workflow_step.") ||
+            p.Code.StartsWith("workflow_transition.") ||
+            p.Code.StartsWith("workflow_lookup.")
+        ).ToList();
+
+        // Auditor -> Read-only + can view tasks (my + optionally all)
+        var auditorPerms = allPerms.Where(p =>
+            p.Code.EndsWith(".read") ||
+            p.Code.StartsWith("audit_log") ||
+            p.Code == "workflow_task.read_my" ||
+            p.Code == "workflow_task.read_all" ||          // keep if you support this perm
+            p.Code == "inventory_request.read" ||
+            p.Code == "workflow_template.read"
+        ).ToList();
+        await AssignPermissionsToRole(context, GetRole("AUDITOR"), auditorPerms, "GLOBAL");
+
+        // Manager -> Requests + org + runtime tasks + can read templates
+        var managerPerms = allPerms.Where(p =>
+            p.Code.StartsWith("user.") ||
+            p.Code.StartsWith("inventory_request.") ||
+            p.Code.StartsWith("department.") ||
+            p.Code == "inventory_request.read" ||
+            p.Code == "workflow_template.read" ||
+            p.Code == "workflow_task.read_my" ||
+            p.Code == "workflow_task.claim" ||
+            p.Code == "workflow_task.action" ||
+            p.Code == "workflow_task.read_eligible_assignees"
+        ).ToList();
+        await AssignPermissionsToRole(context, GetRole("MANAGER"), managerPerms, "GLOBAL");
+
+        // Approver -> runtime tasks + can read requests + read templates
+        var approverPerms = allPerms.Where(p =>
+            p.Code == "inventory_request.read" ||
+            p.Code == "workflow_template.read" ||
+            p.Code == "workflow_task.read_my" ||
+            p.Code == "workflow_task.claim" ||
+            p.Code == "workflow_task.action" ||
+            p.Code == "workflow_task.read_eligible_assignees"
+        ).ToList();
+        await AssignPermissionsToRole(context, GetRole("APPROVER"), approverPerms, "GLOBAL");
+
+        // Reviewer -> runtime tasks + can read requests + read templates
+        var reviewerPerms = allPerms.Where(p =>
+            p.Code == "inventory_request.read" ||
+            p.Code == "workflow_template.read" ||
+            p.Code == "workflow_task.read_my" ||
+            p.Code == "workflow_task.claim" ||
+            p.Code == "workflow_task.action" ||
+            p.Code == "workflow_task.read_eligible_assignees"
+        ).ToList();
+        await AssignPermissionsToRole(context, GetRole("REVIEWER"), reviewerPerms, "GLOBAL");
+
+        // Storekeeper -> stock/reservations/products + runtime tasks (fulfillment step) + read templates
+        var storePerms = allPerms.Where(p =>
+            p.Code.StartsWith("stock_") ||
             p.Code.StartsWith("reservation.") ||
             p.Code.StartsWith("product.") ||
             p.Code.StartsWith("category.") ||
-            p.Code == "inventory_request.read").ToList();
-        await AssignPermissionsToRole(context, GetRole("STOREKEEPER"), storePerms, "GLOBAL"); 
+            p.Code == "inventory_request.read" ||
+            p.Code == "workflow_template.read" ||
+            p.Code == "workflow_task.read_my" ||
+            p.Code == "workflow_task.claim" ||
+            p.Code == "workflow_task.action" ||
+            p.Code == "workflow_task.read_eligible_assignees"
+        ).ToList();
+        await AssignPermissionsToRole(context, GetRole("STOREKEEPER"), storePerms, "GLOBAL");
 
-        // User -> Request CRUD
-        var userPerms = allPerms.Where(p => 
-            p.Code == "inventory_request.read" || 
-            p.Code == "inventory_request.create" || 
-            p.Code == "inventory_request.update_draft").ToList();
+        // User -> request create/update/submit/cancel + can view & action their tasks (submission/confirmation)
+        var userPerms = allPerms.Where(p =>
+            p.Code == "inventory_request.read" ||
+            p.Code == "inventory_request.create" ||
+            p.Code == "inventory_request.update_draft" ||
+            p.Code == "inventory_request.submit" ||        // include if you enforce submit perm
+            p.Code == "inventory_request.cancel" ||        // include if you enforce cancel perm
+            p.Code == "workflow_task.read_my" ||
+            p.Code == "workflow_task.action"               // needed for confirmation task action
+        ).ToList();
         await AssignPermissionsToRole(context, GetRole("USER"), userPerms, "GLOBAL");
 
+        // Optional: if you want a non-admin to manage templates (usually NOT), you can assign workflowAdminPerms to a role.
+        // await AssignPermissionsToRole(context, GetRole("MANAGER"), workflowAdminPerms, "GLOBAL");
 
         // ==============================================================================
-        // 7. Seed 300 Users
+        // 7. Seed Users (role-per-dept + filler to ~300)
         // ==============================================================================
-        if (await context.Users.CountAsync() < 10) 
+        if (await context.Users.CountAsync() < 10)
         {
             var usersToSeed = new List<User>();
             var userRolesToSeed = new List<UserRole>();
             var userDeptsToSeed = new List<UserDepartment>();
 
             var passwordHash = BCrypt.Net.BCrypt.HashPassword("password123");
-            
-            var realNames = new[] { 
+
+            var realNames = new[]
+            {
                 "Adeyemi Johnson", "Chidi Okafor", "Fatima Abubakar", "Kwame Nkrumah", "Zainab Mensah",
                 "Oluwaseun Adewale", "Amadi Dike", "Bature Gambo", "Ebele Azikiwe", "Femi Kuti",
                 "Gideon Okeke", "Habiba Sani", "Ibrahim Bio", "Jolomi Ayiri", "Kelechi Iheanacho",
                 "Lola Shoneyin", "Musa Yaradua", "Nuhu Ribadu", "Omotola Jalade", "Patience Akpabio",
                 "Quasim Alabi", "Rakiya Danjuma", "Sadiq Abubakar", "Tunde Bakare", "Uche Jombo",
-                "Victoria Inyama", "Wale Adenuga", "Xaxa Bello", "Yemi Alade", "Zulum Kashim",
-                "Adebayo Balogun", "Chinelo Okonkwo", "Damilola Adegbite", "Emeka Ike", "Folake Coker",
-                "Gbenga Akinnagbe", "Hafsat Abiola", "Ify Oji", "Jim Iyke", "Kunle Afolayan",
-                "Linda Ikeji", "Majid Michel", "Nadia Buari", "Omoni Oboli", "Phyno Nelson",
-                "Rabbie Namaliu", "Simi Kosoko", "Tiwa Savage", "Ubi Franklin", "Vector Tha Viper",
-                "Wizkid Balogun", "Ycee Oludemilade", "Zlatan Ibile", "Burnaboy Ogulu", "Davido Adeleke"
+                "Victoria Inyama", "Wale Adenuga", "Yemi Alade", "Zlatan Ibile", "Burnaboy Ogulu",
+                "Davido Adeleke", "Tiwa Savage", "Simi Kosoko", "Kunle Afolayan", "Linda Ikeji"
             };
 
             int nameIndex = 0;
-            // Create a user for each Role in each Department
+
+            // One user for each Role in each Department
             foreach (var dept in depts)
             {
                 foreach (var role in roles)
                 {
                     var realName = realNames[nameIndex % realNames.Length];
-                    var nameParts = realName.Split(' ');
+                    var nameParts = realName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     var baseUsername = (nameParts[0].Substring(0, 1) + nameParts[1]).ToLower();
-                    
-                    // Specific usernames for first two users of first department (usually SU and Admin)
-                    var username = (dept.Name == "IT" && role.Code == "SUPERADMIN") ? "superadmin" : 
-                                   (dept.Name == "IT" && role.Code == "ADMIN") ? "admin" : 
-                                   $"{baseUsername}{nameIndex + 1}";
+
+                    var username =
+                        (dept.Name == "IT" && role.Code == "SUPERADMIN") ? "superadmin" :
+                        (dept.Name == "IT" && role.Code == "ADMIN") ? "admin" :
+                        $"{baseUsername}{nameIndex + 1}";
 
                     var user = new User
                     {
@@ -457,16 +517,40 @@ public static class DbSeeder
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     };
+
                     usersToSeed.Add(user);
-                    
-                    // We'll map these after saving users to get IDs
                     nameIndex++;
                 }
             }
-            
+
+            // Fill to ~300 with standard users
+            var target = 300;
+            var rnd = new Random();
+            while (usersToSeed.Count < target)
+            {
+                var realName = realNames[nameIndex % realNames.Length];
+                var nameParts = realName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var baseUsername = (nameParts[0].Substring(0, 1) + nameParts[1]).ToLower();
+                var username = $"{baseUsername}{nameIndex + 1}";
+
+                usersToSeed.Add(new User
+                {
+                    Username = username,
+                    Email = $"{username}@invserver.local",
+                    DisplayName = realName,
+                    PasswordHash = passwordHash,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                nameIndex++;
+            }
+
             context.Users.AddRange(usersToSeed);
             await context.SaveChangesAsync();
 
+            // Map dept/role links
+            // First block is strictly dept x role
             int userIdx = 0;
             foreach (var dept in depts)
             {
@@ -478,29 +562,49 @@ public static class DbSeeder
                     userIdx++;
                 }
             }
-            
+
+            // Remaining users are USER role, random dept
+            var userRole = GetRole("USER");
+            for (; userIdx < usersToSeed.Count; userIdx++)
+            {
+                var user = usersToSeed[userIdx];
+                var dept = depts[rnd.Next(depts.Count)];
+
+                userRolesToSeed.Add(new UserRole { UserId = user.UserId, RoleId = userRole.RoleId, AssignedAt = DateTime.UtcNow });
+                userDeptsToSeed.Add(new UserDepartment { UserId = user.UserId, DepartmentId = dept.DepartmentId, IsPrimary = true, AssignedAt = DateTime.UtcNow });
+            }
+
             context.UserRoles.AddRange(userRolesToSeed);
             context.UserDepartments.AddRange(userDeptsToSeed);
             await context.SaveChangesAsync();
         }
 
         // ==============================================================================
-        // 8. Workflow Templates
+        // 8. Workflow Templates (NO VERSIONS)
         // ==============================================================================
-        // ==============================================================================
-        // 8. Workflow Templates
-        // ==============================================================================
-        // Helper to ensure workflow existence
-        async Task<WorkflowDefinition> EnsureWorkflowDef(string code, string name)
+        async Task<WorkflowTemplate> EnsureWorkflowTemplate(string code, string name)
         {
-            var def = await context.WorkflowDefinitions.FirstOrDefaultAsync(d => d.Code == code);
-            if (def == null)
+            var tpl = await context.WorkflowTemplates.FirstOrDefaultAsync(t => t.Code == code);
+            if (tpl == null)
             {
-                def = new WorkflowDefinition { Code = code, Name = name, IsActive = true, CreatedAt = DateTime.UtcNow };
-                context.WorkflowDefinitions.Add(def);
+                tpl = new WorkflowTemplate
+                {
+                    Code = code,
+                    Name = name,
+                    Status = "PUBLISHED",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                context.WorkflowTemplates.Add(tpl);
                 await context.SaveChangesAsync();
             }
-            return def;
+            else if (tpl.Status != "PUBLISHED")
+            {
+                tpl.Status = "PUBLISHED";
+                context.WorkflowTemplates.Update(tpl);
+                await context.SaveChangesAsync();
+            }
+            return tpl;
         }
 
         var assignmentModes = await context.WorkflowAssignmentModes.ToDictionaryAsync(m => m.Code, m => m.AssignmentModeId);
@@ -508,114 +612,204 @@ public static class DbSeeder
         var stepTypes = await context.WorkflowStepTypes.ToDictionaryAsync(t => t.Code, t => t.WorkflowStepTypeId);
         var actionTypes = await context.WorkflowActionTypes.ToDictionaryAsync(t => t.Code, t => t.WorkflowActionTypeId);
 
-        // Define the templates we want
+        // Template definitions
         var templates = new[]
         {
-            new { Code = "SIMPLE_APPROVE", Name = "Simple Approval Flow", Role = "MANAGER" },
-            new { Code = "FINANCE_FLOW", Name = "Finance Approval Flow", Role = "ADMIN" },
-            new { Code = "STOCK_FLOW", Name = "Stock fulfillment Flow", Role = "STOREKEEPER" }
-        };
+    new { Code = "SIMPLE_APPROVE", Name = "Simple Approval Flow", ApproverRole = "MANAGER" },
+    new { Code = "FINANCE_FLOW",   Name = "Finance Approval Flow", ApproverRole = "ADMIN" },
+    new { Code = "STOCK_FLOW",     Name = "Stock Fulfillment Flow", ApproverRole = "MANAGER" },
+};
 
-        foreach (var tpl in templates)
+        foreach (var t in templates)
         {
-            var def = await EnsureWorkflowDef(tpl.Code, tpl.Name);
+            var tpl = await EnsureWorkflowTemplate(t.Code, t.Name);
 
-            // Ensure v1 exists
-            if (!await context.WorkflowDefinitionVersions.AnyAsync(v => v.WorkflowDefinitionId == def.WorkflowDefinitionId))
+            // If steps already exist for this template, skip (idempotent)
+            if (await context.WorkflowSteps.AnyAsync(s => s.WorkflowTemplateId == tpl.WorkflowTemplateId))
+                continue;
+
+            // Steps: SUBMISSION -> APPROVAL -> FULFILLMENT -> CONFIRMATION -> END
+            var sSubmission = new WorkflowStep
             {
-                var v1 = new WorkflowDefinitionVersion
-                {
-                    WorkflowDefinitionId = def.WorkflowDefinitionId,
-                    VersionNo = 1,
-                    IsActive = true,
-                    PublishedAt = DateTime.UtcNow,
-                    DefinitionJson = "{}"
-                };
-                context.WorkflowDefinitionVersions.Add(v1);
-                await context.SaveChangesAsync();
+                WorkflowTemplateId = tpl.WorkflowTemplateId,
+                StepKey = "SUBMISSION",
+                Name = "Submission",
+                WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Start],
+                SequenceNo = 0,
+                IsSystemRequired = true
+            };
 
-                // Create Default Steps: Submission -> Fulfillment -> Confirmation -> End
-                var sStart = new WorkflowStep { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, StepKey = "START", Name = "Submission", WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Start], SequenceNo = 0, IsSystemRequired = true };
-                var sFulfill = new WorkflowStep { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, StepKey = "FULFILL", Name = "Fulfillment", WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Fulfillment], SequenceNo = 1, IsSystemRequired = true };
-                var sConfirm = new WorkflowStep { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, StepKey = "CONFIRM", Name = "Confirmation", WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Review], SequenceNo = 2, IsSystemRequired = true };
-                var sEnd = new WorkflowStep { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, StepKey = "END", Name = "End", WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.End], SequenceNo = 3, IsSystemRequired = true };
-                
-                context.WorkflowSteps.AddRange(sStart, sFulfill, sConfirm, sEnd);
-                await context.SaveChangesAsync();
-
-                // Rules
-                // Start: Requester
-                context.WorkflowStepRules.Add(new WorkflowStepRule 
-                { 
-                    WorkflowStepId = sStart.WorkflowStepId, 
-                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Requestor] 
-                });
-                
-                // Fulfillment: Specific Role (Manager/Finance/Storekeeper)
-                context.WorkflowStepRules.Add(new WorkflowStepRule 
-                { 
-                    WorkflowStepId = sFulfill.WorkflowStepId, 
-                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Role], 
-                    RoleId = rolesByCode.ContainsKey(tpl.Role) ? rolesByCode[tpl.Role] : rolesByCode["MANAGER"] 
-                });
-                
-                // Confirmation: Requester
-                context.WorkflowStepRules.Add(new WorkflowStepRule 
-                { 
-                    WorkflowStepId = sConfirm.WorkflowStepId, 
-                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Requestor] 
-                });
-                
-                await context.SaveChangesAsync();
-
-                // Transitions
-                // Start -> Fulfill (Submit)
-                context.WorkflowTransitions.Add(new WorkflowTransition { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, FromWorkflowStepId = sStart.WorkflowStepId, ToWorkflowStepId = sFulfill.WorkflowStepId, WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Submit] });
-                
-                // Fulfill -> Confirm (Complete)
-                context.WorkflowTransitions.Add(new WorkflowTransition { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, FromWorkflowStepId = sFulfill.WorkflowStepId, ToWorkflowStepId = sConfirm.WorkflowStepId, WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Complete] });
-                
-                // Confirm -> End (Approve)
-                context.WorkflowTransitions.Add(new WorkflowTransition { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, FromWorkflowStepId = sConfirm.WorkflowStepId, ToWorkflowStepId = sEnd.WorkflowStepId, WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Approve] });
-
-                // Cancellations
-                context.WorkflowTransitions.Add(new WorkflowTransition { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, FromWorkflowStepId = sStart.WorkflowStepId, ToWorkflowStepId = sEnd.WorkflowStepId, WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Cancel] });
-                context.WorkflowTransitions.Add(new WorkflowTransition { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, FromWorkflowStepId = sFulfill.WorkflowStepId, ToWorkflowStepId = sEnd.WorkflowStepId, WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Cancel] });
-                context.WorkflowTransitions.Add(new WorkflowTransition { WorkflowDefinitionVersionId = v1.WorkflowDefinitionVersionId, FromWorkflowStepId = sConfirm.WorkflowStepId, ToWorkflowStepId = sEnd.WorkflowStepId, WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Cancel] });
-                
-                await context.SaveChangesAsync();
-            }
-
-            // Seed v2 for SIMPLE_APPROVE only, to show multi-version support
-            if (tpl.Code == "SIMPLE_APPROVE" && !await context.WorkflowDefinitionVersions.AnyAsync(v => v.WorkflowDefinitionId == def.WorkflowDefinitionId && v.VersionNo == 2))
+            var sApproval = new WorkflowStep
             {
-                // Deactivate v1
-                var v1 = await context.WorkflowDefinitionVersions.FirstOrDefaultAsync(v => v.WorkflowDefinitionId == def.WorkflowDefinitionId && v.VersionNo == 1);
-                if (v1 != null) { v1.IsActive = false; }
+                WorkflowTemplateId = tpl.WorkflowTemplateId,
+                StepKey = "APPROVAL",
+                Name = "Approval",
+                WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Approval],
+                SequenceNo = 1,
+                IsSystemRequired = true
+            };
 
-                var v2 = new WorkflowDefinitionVersion
+            var sFulfillment = new WorkflowStep
+            {
+                WorkflowTemplateId = tpl.WorkflowTemplateId,
+                StepKey = "FULFILLMENT",
+                Name = "Fulfillment",
+                WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Fulfillment],
+                SequenceNo = 2,
+                IsSystemRequired = true
+            };
+
+            var sConfirmation = new WorkflowStep
+            {
+                WorkflowTemplateId = tpl.WorkflowTemplateId,
+                StepKey = "CONFIRMATION",
+                Name = "Requester Confirmation",
+                WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Review],
+                SequenceNo = 3,
+                IsSystemRequired = true
+            };
+
+            var sEnd = new WorkflowStep
+            {
+                WorkflowTemplateId = tpl.WorkflowTemplateId,
+                StepKey = "END",
+                Name = "End",
+                WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.End],
+                SequenceNo = 4,
+                IsSystemRequired = true
+            };
+
+            context.WorkflowSteps.AddRange(sSubmission, sApproval, sFulfillment, sConfirmation, sEnd);
+            await context.SaveChangesAsync();
+
+            // Step Rules (1 rule per step)
+            context.WorkflowStepRules.AddRange(
+                // Submission: Requestor
+                new WorkflowStepRule
                 {
-                    WorkflowDefinitionId = def.WorkflowDefinitionId,
-                    VersionNo = 2,
-                    IsActive = true,
-                    PublishedAt = DateTime.UtcNow,
-                    DefinitionJson = "{}"
-                };
-                context.WorkflowDefinitionVersions.Add(v2);
-                await context.SaveChangesAsync();
+                    WorkflowStepId = sSubmission.WorkflowStepId,
+                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Requestor]
+                },
 
-                // Clone logic for v2 (simplified here, just recreate similar steps)
-                var sStart = new WorkflowStep { WorkflowDefinitionVersionId = v2.WorkflowDefinitionVersionId, StepKey = "START", Name = "Submission v2", WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Start], SequenceNo = 0, IsSystemRequired = true };
-                var sEnd = new WorkflowStep { WorkflowDefinitionVersionId = v2.WorkflowDefinitionVersionId, StepKey = "END", Name = "End", WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.End], SequenceNo = 1, IsSystemRequired = true };
-                context.WorkflowSteps.AddRange(sStart, sEnd);
-                await context.SaveChangesAsync();
-                
-                context.WorkflowStepRules.Add(new WorkflowStepRule { WorkflowStepId = sStart.WorkflowStepId, AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Requestor] });
-                context.WorkflowTransitions.Add(new WorkflowTransition { WorkflowDefinitionVersionId = v2.WorkflowDefinitionVersionId, FromWorkflowStepId = sStart.WorkflowStepId, ToWorkflowStepId = sEnd.WorkflowStepId, WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Submit] });
-                
-                await context.SaveChangesAsync();
-            }
+                // Approval: Role-based (template approver role)
+                new WorkflowStepRule
+                {
+                    WorkflowStepId = sApproval.WorkflowStepId,
+                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Role],
+                    RoleId = rolesByCode[t.ApproverRole],
+                    AllowRequesterSelect = true
+                },
+
+                // Fulfillment: Storekeeper
+                new WorkflowStepRule
+                {
+                    WorkflowStepId = sFulfillment.WorkflowStepId,
+                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Role],
+                    RoleId = rolesByCode["STOREKEEPER"],
+                    AllowRequesterSelect = true
+                },
+
+                // Confirmation: Requestor
+                new WorkflowStepRule
+                {
+                    WorkflowStepId = sConfirmation.WorkflowStepId,
+                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Requestor]
+                }
+            );
+
+            await context.SaveChangesAsync();
+
+            // Transitions (unique per template + fromStep + action)
+            context.WorkflowTransitions.AddRange(
+                // Submission -> Approval (SUBMIT)
+                new WorkflowTransition
+                {
+                    WorkflowTemplateId = tpl.WorkflowTemplateId,
+                    FromWorkflowStepId = sSubmission.WorkflowStepId,
+                    ToWorkflowStepId = sApproval.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Submit]
+                },
+
+                // Approval -> Fulfillment (APPROVE)
+                new WorkflowTransition
+                {
+                    WorkflowTemplateId = tpl.WorkflowTemplateId,
+                    FromWorkflowStepId = sApproval.WorkflowStepId,
+                    ToWorkflowStepId = sFulfillment.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Approve]
+                },
+
+                // Fulfillment -> Confirmation (COMPLETE)
+                new WorkflowTransition
+                {
+                    WorkflowTemplateId = tpl.WorkflowTemplateId,
+                    FromWorkflowStepId = sFulfillment.WorkflowStepId,
+                    ToWorkflowStepId = sConfirmation.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Complete]
+                },
+
+                // Confirmation -> End (APPROVE)
+                new WorkflowTransition
+                {
+                    WorkflowTemplateId = tpl.WorkflowTemplateId,
+                    FromWorkflowStepId = sConfirmation.WorkflowStepId,
+                    ToWorkflowStepId = sEnd.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Approve]
+                },
+
+                // CANCEL only from SUBMISSION
+                new WorkflowTransition
+                {
+                    WorkflowTemplateId = tpl.WorkflowTemplateId,
+                    FromWorkflowStepId = sSubmission.WorkflowStepId,
+                    ToWorkflowStepId = sEnd.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Cancel]
+                },
+
+                // REJECT from ANY step -> SUBMISSION
+                new WorkflowTransition
+                {
+                    WorkflowTemplateId = tpl.WorkflowTemplateId,
+                    FromWorkflowStepId = sApproval.WorkflowStepId,
+                    ToWorkflowStepId = sSubmission.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Reject]
+                },
+                new WorkflowTransition
+                {
+                    WorkflowTemplateId = tpl.WorkflowTemplateId,
+                    FromWorkflowStepId = sFulfillment.WorkflowStepId,
+                    ToWorkflowStepId = sSubmission.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Reject]
+                },
+                new WorkflowTransition
+                {
+                    WorkflowTemplateId = tpl.WorkflowTemplateId,
+                    FromWorkflowStepId = sConfirmation.WorkflowStepId,
+                    ToWorkflowStepId = sSubmission.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Reject]
+                }
+            );
+
+            await context.SaveChangesAsync();
         }
+
+        // PATCH: Ensure all Approval/Fulfillment rules allow requester select
+        var rulesToPatch = await context.WorkflowStepRules
+            .Include(r => r.WorkflowStep)
+            .Where(r => 
+                (r.WorkflowStep.StepKey == "APPROVAL" || r.WorkflowStep.StepKey == "FULFILLMENT") && 
+                !r.AllowRequesterSelect)
+            .ToListAsync();
+
+        if (rulesToPatch.Any())
+        {
+            foreach (var r in rulesToPatch)
+            {
+                r.AllowRequesterSelect = true;
+            }
+            await context.SaveChangesAsync();
+        }
+
 
         // ==============================================================================
         // 9. Initial Stock
@@ -645,8 +839,6 @@ public static class DbSeeder
 
                 foreach (var p in allProducts)
                 {
-                    // Randomly decide to add stock (ensure at least 2 warehouses per product if possible)
-                    // Or just add stock for all products in all warehouses for simplicity in demo
                     var qty = rnd.Next(20, 150);
                     stockIn.Lines.Add(new StockMovementLine
                     {
@@ -672,30 +864,30 @@ public static class DbSeeder
 
     private static string ToHumanName(string input)
     {
-        return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(input.Replace(".", " ").Replace("_", " "));
+        return System.Globalization.CultureInfo.CurrentCulture.TextInfo
+            .ToTitleCase(input.Replace(".", " ").Replace("_", " "));
     }
 
     private static async Task AssignPermissionsToRole(InvDbContext context, Role role, List<Permission> perms, string scopeCode)
     {
-        // Simple distinct assignment
-        var existingParams = await context.RolePermissions.Where(rp => rp.RoleId == role.RoleId).Select(rp => rp.PermissionId).ToListAsync();
-        var scopeType = await context.AccessScopeTypes.FirstOrDefaultAsync(s => s.Code == scopeCode);
+        var existingPermIds = await context.RolePermissions
+            .Where(rp => rp.RoleId == role.RoleId)
+            .Select(rp => rp.PermissionId)
+            .ToListAsync();
 
         foreach (var p in perms)
         {
-            if (!existingParams.Contains(p.PermissionId))
+            if (!existingPermIds.Contains(p.PermissionId))
             {
-                var rp = new RolePermission { RoleId = role.RoleId, PermissionId = p.PermissionId, GrantedAt = DateTime.UtcNow };
-                context.RolePermissions.Add(rp);
-                
-                // If we had scope logic
-                if (scopeType != null)
+                context.RolePermissions.Add(new RolePermission
                 {
-                     // In a real app we'd add the scope relationship here
-                     // But for now we just seed the link
-                }
+                    RoleId = role.RoleId,
+                    PermissionId = p.PermissionId,
+                    GrantedAt = DateTime.UtcNow
+                });
             }
         }
+
         await context.SaveChangesAsync();
     }
 }

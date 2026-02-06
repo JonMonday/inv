@@ -43,14 +43,43 @@ export interface Permission {
     isActive: boolean;
 }
 
+export interface WorkflowStep {
+    workflowStepId: number;
+    stepKey: string;
+    name: string;
+    stepTypeCode: string;
+    sequenceNo: number;
+    isActive: boolean;
+    isSystemRequired: boolean;
+    rule?: {
+        assignmentModeCode: string;
+        roleId?: number;
+        roleName?: string;
+        departmentId?: number;
+        departmentName?: string;
+        minApprovers: number;
+        requireAll: boolean;
+    };
+}
+
+export interface WorkflowTransition {
+    workflowTransitionId: number;
+    fromStepKey: string;
+    toStepKey: string;
+    actionCode: string;
+}
+
 export interface WorkflowTemplate {
-    id: number;
+    workflowTemplateId: number;
     code: string;
     name: string;
     definitionJson?: string;
-    latestVersion?: number;
-    steps?: any[];
-    transitions?: any[];
+    status: string;
+    isActive: boolean;
+    createdAt: string;
+    publishedAt?: string;
+    steps?: WorkflowStep[];
+    transitions?: WorkflowTransition[];
 }
 
 export function useUsers(request: PagedRequest = { pageNumber: 1, pageSize: 10 }) {
@@ -143,8 +172,8 @@ export function useAuditLogs(request: PagedRequest = { pageNumber: 1, pageSize: 
 export function usePublishWorkflow() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (data: { workflowCode: string, definitionJson: string }) => {
-            const response = await apiClient.post('/api/admin/workflows/publish', data);
+        mutationFn: async (id: number) => {
+            const response = await apiClient.post(`/api/workflow/templates/${id}/publish`);
             return response.data;
         },
         onSuccess: () => {
@@ -153,14 +182,14 @@ export function usePublishWorkflow() {
     });
 }
 
-export function useWorkflowTemplate(code: string) {
+export function useWorkflowTemplate(id: number | string | null) {
     return useQuery<WorkflowTemplate>({
-        queryKey: ['admin', 'workflow', code],
+        queryKey: ['admin', 'workflow', id],
         queryFn: async () => {
-            const response = await apiClient.get(`/api/admin/workflows/${code}`);
+            const response = await apiClient.get(`/api/workflow/templates/${id}`);
             return response.data.data;
         },
-        enabled: !!code,
+        enabled: !!id,
     });
 }
 export interface WorkflowStep {
@@ -185,11 +214,13 @@ export function useWorkflowTemplateSteps(id: number | null) {
 export interface AssignmentOption {
     workflowStepId: number;
     name: string;
-    modeCode: string;
+    modeCode: string; // 'SYSTEM', 'REQ', 'SPECIFIC_ROLE', etc.
     assignmentMode: string;
     roleName?: string;
     departmentName?: string;
     isManual: boolean;
+    isRequired?: boolean;
+    allowMultiple?: boolean;
     eligibleUsers: {
         userId: number;
         displayName: string;
@@ -197,14 +228,19 @@ export interface AssignmentOption {
     }[];
 }
 
-export function useAssignmentOptions(versionId: number | null) {
+export interface WorkflowManualAssignmentDto {
+    workflowStepId: number;
+    userIds: number[];
+}
+
+export function useAssignmentOptions(templateId: number | null) {
     return useQuery<AssignmentOption[]>({
-        queryKey: ['admin', 'workflow', 'assignment-options', versionId],
+        queryKey: ['admin', 'workflow', 'assignment-options', templateId],
         queryFn: async () => {
-            const response = await apiClient.get(`/api/workflow/templates/versions/${versionId}/assignment-options`);
+            const response = await apiClient.get(`/api/workflow/templates/${templateId}/assignment-options`);
             return response.data.data;
         },
-        enabled: !!versionId,
+        enabled: !!templateId,
     });
 }
 

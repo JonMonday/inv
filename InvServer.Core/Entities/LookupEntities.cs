@@ -18,6 +18,8 @@ public class WorkflowTaskAssigneeStatus
 {
     [Key]
     public long AssigneeStatusId { get; set; }
+    public bool IsTerminal { get; set; }
+
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
 }

@@ -3,22 +3,25 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-    ClipboardList,
-    Package,
-    ShoppingCart,
-    Users,
-    Settings,
     LayoutDashboard,
-    Box,
-    Warehouse,
     Bell,
-    FileText,
+    UserCircle,
+    ShoppingCart,
+    Truck,
+    Box,
+    Package,
+    Warehouse,
     History,
+    FileText,
     BarChart3,
     ShieldCheck,
+    Settings,
     HelpCircle,
-    Truck,
-    UserCircle
+    PlusCircle,
+    Inbox,
+    FilePlus2,
+    ClipboardList,
+    Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -38,19 +41,22 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
     {
-        title: 'General',
+        title: 'Workflows',
         items: [
-            { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-            { name: 'My Tasks', href: '/tasks', icon: ClipboardList },
-            { name: 'Notifications', href: '/notifications', icon: Bell },
-            { name: 'My Profile', href: '/profile', icon: UserCircle },
+            { name: 'Inbox', href: '/tasks', icon: Inbox, badge: 3 },
+            { name: 'Drafts', href: '/requests/drafts', icon: FileText },
+            { name: 'New Request', href: '/requests/new', icon: FilePlus2 },
+            { name: 'Participated', href: '/requests/participated', icon: History },
+            { name: 'Requests', href: '/requests', icon: ShoppingCart },
         ]
     },
     {
         title: 'Operations',
         items: [
-            { name: 'Requests', href: '/requests', icon: ShoppingCart },
+            { name: 'Dashboard', href: '/', icon: LayoutDashboard },
             { name: 'Fulfillment', href: '/fulfillment', icon: Truck },
+            { name: 'Notifications', href: '/notifications', icon: Bell },
+            { name: 'Profile', href: '/profile', icon: UserCircle },
         ]
     },
     {

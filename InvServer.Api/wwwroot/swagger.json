@@ -1,1639 +1,2674 @@
 {
-    "openapi": "3.0.3",
-    "info": {
-        "title": "InvServer API",
-        "description": "Comprehensive API for Inventory Management, Workflow Governance, and Idempotent Fulfillment.\n\nKey Features:\n- **Idempotency**: All fulfillment operations require `X-Idempotency-Key`.\n- **Workflow**: Governed lifecycle (Draft -> In Workflow -> Fulfillment).\n- **RBAC**: Scope-based access control (OWN, DEPT, WAREHOUSE, GLOBAL).",
-        "version": "1.1.0",
-        "contact": {
-            "name": "API Support",
-            "email": "support@invserver.local"
-        }
-    },
-    "servers": [
-        {
-            "url": "/",
-            "description": "Default"
-        }
-    ],
-    "components": {
-        "securitySchemes": {
-            "bearerAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT"
-            }
-        },
-        "schemas": {
-            "ApiError": {
-                "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "example": "Validation failed."
-                    },
-                    "code": {
-                        "type": "string",
-                        "example": "VALIDATION_ERROR"
-                    },
-                    "details": {
-                        "type": "object"
-                    },
-                    "correlationId": {
-                        "type": "string",
-                        "example": "550e8400-e29b-41d4-a716-446655440000"
-                    }
-                }
-            },
-            "ApiResponse_Generic": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object"
-                    },
-                    "correlationId": {
-                        "type": "string"
-                    },
-                    "error": {
-                        "$ref": "#/components/schemas/ApiError"
-                    }
-                }
-            },
-            "ApiResponse_AuthResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/AuthResponse"
-                    },
-                    "correlationId": {
-                        "type": "string"
-                    },
-                    "error": {
-                        "$ref": "#/components/schemas/ApiError"
-                    }
-                }
-            },
-            "ApiResponse_Long": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "integer",
-                        "format": "int64"
-                    },
-                    "correlationId": {
-                        "type": "string"
-                    },
-                    "error": {
-                        "$ref": "#/components/schemas/ApiError"
-                    }
-                }
-            },
-            "ApiResponse_String": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "string"
-                    },
-                    "correlationId": {
-                        "type": "string"
-                    },
-                    "error": {
-                        "$ref": "#/components/schemas/ApiError"
-                    }
-                }
-            },
-            "LoginRequest": {
-                "type": "object",
-                "required": [
-                    "username",
-                    "password"
-                ],
-                "properties": {
-                    "username": {
-                        "type": "string",
-                        "example": "jdoe"
-                    },
-                    "password": {
-                        "type": "string",
-                        "example": "SecurePass123!"
-                    }
-                }
-            },
-            "AuthResponse": {
-                "type": "object",
-                "properties": {
-                    "accessToken": {
-                        "type": "string"
-                    },
-                    "expiresAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "refreshToken": {
-                        "type": "string",
-                        "description": "Empty if using HttpOnly cookie flow"
-                    },
-                    "user": {
-                        "type": "object",
-                        "properties": {
-                            "userId": {
-                                "type": "integer",
-                                "format": "int64"
-                            },
-                            "username": {
-                                "type": "string"
-                            },
-                            "displayName": {
-                                "type": "string"
-                            },
-                            "email": {
-                                "type": "string"
-                            },
-                            "roles": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                }
-                            },
-                            "departments": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "InventoryRequestDto": {
-                "type": "object",
-                "required": [
-                    "warehouseId",
-                    "departmentId",
-                    "lines"
-                ],
-                "properties": {
-                    "warehouseId": {
-                        "type": "integer",
-                        "format": "int64",
-                        "example": 101
-                    },
-                    "departmentId": {
-                        "type": "integer",
-                        "format": "int64",
-                        "example": 5
-                    },
-                    "workflowTemplateId": {
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "Optional workflow template to use. If not specified, default is used.",
-                        "example": 1
-                    },
-                    "notes": {
-                        "type": "string",
-                        "example": "Urgent restock for project X"
-                    },
-                    "lines": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/InventoryRequestLineDto"
-                        }
-                    }
-                }
-            },
-            "InventoryRequestLineDto": {
-                "type": "object",
-                "required": [
-                    "productId",
-                    "qtyRequested"
-                ],
-                "properties": {
-                    "productId": {
-                        "type": "integer",
-                        "format": "int64",
-                        "example": 2005
-                    },
-                    "qtyRequested": {
-                        "type": "number",
-                        "example": 10
-                    }
-                }
-            },
-            "StockMovementRequest": {
-                "type": "object",
-                "required": [
-                    "movementTypeCode",
-                    "warehouseId",
-                    "lines"
-                ],
-                "properties": {
-                    "movementTypeCode": {
-                        "type": "string",
-                        "enum": [
-                            "RESERVE",
-                            "RELEASE",
-                            "ISSUE",
-                            "CONSUME_RESERVE"
-                        ],
-                        "example": "RESERVE"
-                    },
-                    "warehouseId": {
-                        "type": "integer",
-                        "format": "int64",
-                        "example": 101
-                    },
-                    "requestId": {
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "Required for fulfillment flows",
-                        "example": 12345
-                    },
-                    "reservationId": {
-                        "type": "integer",
-                        "format": "int64"
-                    },
-                    "userId": {
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "Usually inferred from auth context"
-                    },
-                    "notes": {
-                        "type": "string"
-                    },
-                    "lines": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "required": [
-                                "productId"
-                            ],
-                            "properties": {
-                                "productId": {
-                                    "type": "integer",
-                                    "format": "int64",
-                                    "example": 2005
-                                },
-                                "qtyDeltaOnHand": {
-                                    "type": "number",
-                                    "example": 0
-                                },
-                                "qtyDeltaReserved": {
-                                    "type": "number",
-                                    "example": 10
-                                },
-                                "unitCost": {
-                                    "type": "number"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "WorkflowActionRequest": {
-                "type": "object",
-                "required": [
-                    "actionCode"
-                ],
-                "properties": {
-                    "actionCode": {
-                        "type": "string",
-                        "enum": [
-                            "APPROVE",
-                            "REJECT",
-                            "CANCEL"
-                        ],
-                        "example": "APPROVE"
-                    },
-                    "notes": {
-                        "type": "string",
-                        "example": "Approved after budget check."
-                    },
-                    "payloadJson": {
-                        "type": "string",
-                        "description": "Optional JSON payload for custom logic"
-                    }
-                }
-            },
-            "CreateRoleRequest": {
-                "type": "object",
-                "required": [
-                    "name",
-                    "code"
-                ],
-                "properties": {
-                    "name": {
-                        "type": "string"
-                    },
-                    "code": {
-                        "type": "string"
-                    }
-                }
-            },
-            "UpdateRoleRequest": {
-                "type": "object",
-                "required": [
-                    "name",
-                    "code"
-                ],
-                "properties": {
-                    "name": {
-                        "type": "string"
-                    },
-                    "code": {
-                        "type": "string"
-                    }
-                }
-            },
-            "CreateUserRequest": {
-                "type": "object",
-                "required": [
-                    "username",
-                    "email",
-                    "displayName"
-                ],
-                "properties": {
-                    "username": {
-                        "type": "string"
-                    },
-                    "email": {
-                        "type": "string"
-                    },
-                    "displayName": {
-                        "type": "string"
-                    },
-                    "roleIds": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
-                    }
-                }
-            },
-            "UpdateUserRequest": {
-                "type": "object",
-                "required": [
-                    "email",
-                    "displayName",
-                    "isActive"
-                ],
-                "properties": {
-                    "email": {
-                        "type": "string"
-                    },
-                    "displayName": {
-                        "type": "string"
-                    },
-                    "isActive": {
-                        "type": "boolean"
-                    },
-                    "roleIds": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
-                    }
-                }
-            },
-            "ReferenceEntity": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "integer",
-                        "format": "int64"
-                    },
-                    "name": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "parameters": {
-            "X-Idempotency-Key": {
-                "name": "X-Idempotency-Key",
-                "in": "header",
-                "required": true,
-                "schema": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "description": "Unique key to ensure idempotency. Example: `550e8400-e29b-41d4-a716-446655440000`"
-            },
-            "X-Correlation-Id": {
-                "name": "X-Correlation-Id",
-                "in": "header",
-                "required": false,
-                "schema": {
-                    "type": "string"
-                },
-                "description": "Tracing ID for log correlation."
-            }
-        }
-    },
-    "tags": [
-        {
-            "name": "Auth",
-            "description": "Authentication and Session Management"
-        },
-        {
-            "name": "Inventory Requests",
-            "description": "Request Lifecycle Management"
-        },
-        {
-            "name": "Workflow",
-            "description": "Task Governance (Claim/Action)"
-        },
-        {
-            "name": "Fulfillment",
-            "description": "Idempotent Stock Operations"
-        },
-        {
-            "name": "Admin",
-            "description": "RBAC and System Configuration"
-        },
-        {
-            "name": "Reference",
-            "description": "Read-only Reference Data"
-        },
-        {
-            "name": "System",
-            "description": "Health and Metadata"
-        }
-    ],
-    "paths": {
-        "/api/auth/login": {
-            "post": {
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Login",
-                "description": "Returns an access token and sets a standard `refreshToken` HttpOnly cookie.",
-                "operationId": "Login",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/LoginRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Success",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_AuthResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Invalid credentials",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/auth/refresh": {
-            "post": {
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Refresh Token",
-                "description": "Uses the `refreshToken` cookie to issue a new access token.",
-                "operationId": "Refresh",
-                "responses": {
-                    "200": {
-                        "description": "Success",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_AuthResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Invalid/Expired Token"
-                    }
-                }
-            }
-        },
-        "/api/auth/logout": {
-            "post": {
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Logout",
-                "description": "Invalidates the refresh token session.",
-                "responses": {
-                    "200": {
-                        "description": "Success"
-                    }
-                }
-            }
-        },
-        "/api/auth/me": {
-            "get": {
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Get Current User",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Profile",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/inventory/requests": {
-            "get": {
-                "tags": [
-                    "Inventory Requests"
-                ],
-                "summary": "List Requests",
-                "description": "Lists inventory requests visible to the user based on RBAC scope (OWN, DEPT, WAREHOUSE, GLOBAL).",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "page",
-                        "in": "query",
-                        "schema": {
-                            "type": "integer",
-                            "default": 1
-                        }
-                    },
-                    {
-                        "name": "pageSize",
-                        "in": "query",
-                        "schema": {
-                            "type": "integer",
-                            "default": 20
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "post": {
-                "tags": [
-                    "Inventory Requests"
-                ],
-                "summary": "Create Draft Request",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/InventoryRequestDto"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Created",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Long"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/inventory/requests/{requestId}": {
-            "get": {
-                "tags": [
-                    "Inventory Requests"
-                ],
-                "summary": "Get Request",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "requestId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Detail",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "put": {
-                "tags": [
-                    "Inventory Requests"
-                ],
-                "summary": "Update Draft Request",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "requestId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/InventoryRequestDto"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Updated"
-                    }
-                }
-            }
-        },
-        "/api/inventory/requests/{requestId}/submit": {
-            "post": {
-                "tags": [
-                    "Inventory Requests"
-                ],
-                "summary": "Submit Request",
-                "description": "Transitions request from DRAFT to IN_WORKFLOW.",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "requestId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Submitted",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/inventory/requests/{requestId}/cancel": {
-            "post": {
-                "tags": [
-                    "Inventory Requests"
-                ],
-                "summary": "Cancel Request",
-                "description": "Cancels request. Only allowed if NO active stock reservations exist.",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "requestId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Cancelled"
-                    }
-                }
-            }
-        },
-        "/api/workflow/tasks/my": {
-            "get": {
-                "tags": [
-                    "Workflow"
-                ],
-                "summary": "My Tasks",
-                "description": "Returns tasks where the user is an assignee (PENDING) or the claimer (CLAIMED).",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/workflow/templates": {
-            "get": {
-                "tags": [
-                    "Workflow"
-                ],
-                "summary": "List Workflow Templates",
-                "description": "Lists available workflow templates that can be selected when creating requests.",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/workflow/tasks/{taskId}/eligible-assignees": {
-            "get": {
-                "tags": [
-                    "Workflow"
-                ],
-                "summary": "Get Eligible Assignees",
-                "description": "Returns a list of users eligible to perform actions on this specific task based on workflow rules (Role/Department).",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "taskId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/workflow/tasks/{taskId}/claim": {
-            "post": {
-                "tags": [
-                    "Workflow"
-                ],
-                "summary": "Claim Task",
-                "description": "Atomically claims a task. Fails if already claimed.",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "taskId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Claimed",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_String"
-                                }
-                            }
-                        }
-                    },
-                    "409": {
-                        "description": "Already Claimed",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/workflow/tasks/{taskId}/action": {
-            "post": {
-                "tags": [
-                    "Workflow"
-                ],
-                "summary": "Process Action",
-                "description": "Approve, Reject, or Cancel a task.",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "taskId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/WorkflowActionRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Processed",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_String"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/inventory/requests/{requestId}/fulfillment/reserve": {
-            "post": {
-                "tags": [
-                    "Fulfillment"
-                ],
-                "summary": "Reserve Stock",
-                "description": "Idempotent operation to reserve stock. Only allowed if workflow step is FULFILLMENT.",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "requestId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "$ref": "#/components/parameters/X-Idempotency-Key"
-                    },
-                    {
-                        "$ref": "#/components/parameters/X-Correlation-Id"
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/StockMovementRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Success (or Replay)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Long"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request (Missing Key or Invalid State)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    },
-                    "409": {
-                        "description": "Key Conflict (Processing)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/inventory/requests/{requestId}/fulfillment/release": {
-            "post": {
-                "tags": [
-                    "Fulfillment"
-                ],
-                "summary": "Release Stock",
-                "description": "Reverses a reservation.",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "requestId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "$ref": "#/components/parameters/X-Idempotency-Key"
-                    },
-                    {
-                        "$ref": "#/components/parameters/X-Correlation-Id"
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/StockMovementRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Success",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Long"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/inventory/requests/{requestId}/fulfillment/issue": {
-            "post": {
-                "tags": [
-                    "Fulfillment"
-                ],
-                "summary": "Issue Stock",
-                "description": "Final issue. Consumes reservation if present.",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "requestId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "$ref": "#/components/parameters/X-Idempotency-Key"
-                    },
-                    {
-                        "$ref": "#/components/parameters/X-Correlation-Id"
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/StockMovementRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Success",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Long"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/reference/products": {
-            "get": {
-                "tags": [
-                    "Reference"
-                ],
-                "summary": "List Products",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "search",
-                        "in": "query",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/reference/products/{id}": {
-            "get": {
-                "tags": [
-                    "Reference"
-                ],
-                "summary": "Get Product",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Detail",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/reference/categories": {
-            "get": {
-                "tags": [
-                    "Reference"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "summary": "List Categories",
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/reference/warehouses": {
-            "get": {
-                "tags": [
-                    "Reference"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "summary": "List Warehouses",
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/reference/stock/levels": {
-            "get": {
-                "tags": [
-                    "Reference"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "summary": "Get Stock Levels",
-                "parameters": [
-                    {
-                        "name": "warehouseId",
-                        "in": "query",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "name": "productId",
-                        "in": "query",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Levels",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/roles": {
-            "get": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "post": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CreateRoleRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Created",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Long"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/roles/{id}": {
-            "get": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Detail",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "put": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/UpdateRoleRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Updated",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_String"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/roles/{id}/permissions": {
-            "post": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "array",
-                                "items": {
-                                    "type": "integer"
-                                }
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Updated",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_String"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/users": {
-            "get": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "post": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CreateUserRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Created",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Long"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/users/{id}": {
-            "get": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Detail",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_Generic"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "put": {
-                "tags": [
-                    "Admin"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/UpdateUserRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Updated",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_String"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/system/health": {
-            "get": {
-                "tags": [
-                    "System"
-                ],
-                "summary": "Health",
-                "security": [],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_String"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/system/version": {
-            "get": {
-                "tags": [
-                    "System"
-                ],
-                "summary": "Version",
-                "security": [],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse_String"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+  "openapi": "3.0.3",
+  "info": {
+    "title": "InvServer API",
+    "description": "Comprehensive API for Inventory Management, Workflow Governance, and Idempotent Fulfillment.\n\nKey Features:\n- **Idempotency**: All fulfillment operations require `X-Idempotency-Key`.\n- **Workflow**: Governed lifecycle (Draft -> In Workflow -> Fulfillment).\n- **RBAC**: Scope-based access control (OWN, DEPT, WAREHOUSE, GLOBAL).\n\n(Updated to reflect latest Admin/Workflow/Inventory controller changes.)",
+    "version": "1.2.0",
+    "contact": {
+      "name": "API Support",
+      "email": "support@invserver.local"
     }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Default"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Validation failed."
+          },
+          "code": {
+            "type": "string",
+            "example": "VALIDATION_ERROR"
+          },
+          "details": {
+            "type": "object"
+          },
+          "correlationId": {
+            "type": "string",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        }
+      },
+      "ApiResponse_Generic": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      },
+      "ApiResponse_AuthResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AuthResponse"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      },
+      "ApiResponse_Long": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      },
+      "ApiResponse_String": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "example": "jdoe"
+          },
+          "password": {
+            "type": "string",
+            "example": "SecurePass123!"
+          }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "refreshToken": {
+            "type": "string",
+            "description": "Empty if using HttpOnly cookie flow"
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "username": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "departments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InventoryRequestDto": {
+        "type": "object",
+        "required": [
+          "requestTypeId",
+          "warehouseId",
+          "departmentId",
+          "lines"
+        ],
+        "properties": {
+          "warehouseId": {
+            "type": "integer",
+            "format": "int64",
+            "example": 101
+          },
+          "departmentId": {
+            "type": "integer",
+            "format": "int64",
+            "example": 5
+          },
+          "workflowTemplateId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "Optional workflow template to use. If not specified, default is used.",
+            "example": 1
+          },
+          "notes": {
+            "type": "string",
+            "example": "Urgent restock for project X"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryRequestLineDto"
+            }
+          },
+          "requestTypeId": {
+            "type": "integer",
+            "format": "int64",
+            "example": 1,
+            "description": "Request type identifier"
+          },
+          "manualAssignments": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/WorkflowManualAssignmentDto"
+            },
+            "description": "Optional manual task assignments used when starting the workflow on submit."
+          }
+        }
+      },
+      "InventoryRequestLineDto": {
+        "type": "object",
+        "required": [
+          "productId",
+          "quantity"
+        ],
+        "properties": {
+          "productId": {
+            "type": "integer",
+            "format": "int64",
+            "example": 2005
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double",
+            "example": 10
+          }
+        }
+      },
+      "StockMovementRequest": {
+        "type": "object",
+        "required": [
+          "movementTypeCode",
+          "warehouseId",
+          "lines"
+        ],
+        "properties": {
+          "movementTypeCode": {
+            "type": "string",
+            "enum": [
+              "RESERVE",
+              "RELEASE",
+              "ISSUE",
+              "CONSUME_RESERVE"
+            ],
+            "example": "RESERVE"
+          },
+          "warehouseId": {
+            "type": "integer",
+            "format": "int64",
+            "example": 101
+          },
+          "requestId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Required for fulfillment flows",
+            "example": 12345
+          },
+          "reservationId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Usually inferred from auth context"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "productId"
+              ],
+              "properties": {
+                "productId": {
+                  "type": "integer",
+                  "format": "int64",
+                  "example": 2005
+                },
+                "qtyDeltaOnHand": {
+                  "type": "number",
+                  "example": 0
+                },
+                "qtyDeltaReserved": {
+                  "type": "number",
+                  "example": 10
+                },
+                "unitCost": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "WorkflowActionRequest": {
+        "type": "object",
+        "required": [
+          "actionCode"
+        ],
+        "properties": {
+          "actionCode": {
+            "type": "string",
+            "example": "APPROVE",
+            "description": "Action code defined in the workflow template (e.g., APPROVE, REJECT, CANCEL, SUBMIT, etc.)."
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "example": "Approved after budget check."
+          },
+          "payloadJson": {
+            "type": "string",
+            "nullable": true,
+            "description": "Optional JSON payload for custom logic (e.g., fulfillment selection)."
+          }
+        }
+      },
+      "CreateRoleRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "code"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateRoleRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "code"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "email",
+          "displayName"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "displayName",
+          "isActive"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "ReferenceEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkflowManualAssignmentDto": {
+        "type": "object",
+        "required": [
+          "stepKey",
+          "userId"
+        ],
+        "properties": {
+          "stepKey": {
+            "type": "string",
+            "example": "APPROVAL_1",
+            "description": "Workflow step key to assign manually."
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64",
+            "example": 123,
+            "description": "UserId of the assignee."
+          }
+        }
+      },
+      "SubmitRequestDto": {
+        "type": "object",
+        "properties": {
+          "manualAssignments": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/WorkflowManualAssignmentDto"
+            }
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": [
+          "newPassword"
+        ],
+        "properties": {
+          "newPassword": {
+            "type": "string",
+            "example": "TempPassw0rd!",
+            "description": "New password to set for the user."
+          }
+        }
+      },
+      "CreateTemplateRequest": {
+        "type": "object",
+        "required": [
+          "code",
+          "name"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "INV_REQ_FLOW"
+          },
+          "name": {
+            "type": "string",
+            "example": "Inventory Request Flow"
+          }
+        }
+      },
+      "UpdateTemplateMetaRequest": {
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "isActive"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "INV_REQ_FLOW"
+          },
+          "name": {
+            "type": "string",
+            "example": "Inventory Request Flow"
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "TemplateStepRuleDto": {
+        "type": "object",
+        "required": [
+          "assignmentModeCode"
+        ],
+        "properties": {
+          "assignmentModeCode": {
+            "type": "string",
+            "example": "ROLE",
+            "description": "Assignment mode code (e.g., ROLE, DEPT, REQUESTER_DEPT, MANUAL)."
+          },
+          "roleId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "example": 2
+          },
+          "departmentId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "example": 5
+          },
+          "useRequesterDepartment": {
+            "type": "boolean",
+            "example": false
+          },
+          "allowRequesterSelect": {
+            "type": "boolean",
+            "example": false
+          },
+          "minApprovers": {
+            "type": "integer",
+            "example": 1
+          },
+          "requireAll": {
+            "type": "boolean",
+            "example": false
+          },
+          "allowReassign": {
+            "type": "boolean",
+            "example": true
+          },
+          "allowDelegate": {
+            "type": "boolean",
+            "example": true
+          },
+          "sla_Minutes": {
+            "type": "integer",
+            "nullable": true,
+            "example": 1440
+          }
+        }
+      },
+      "TemplateStepDto": {
+        "type": "object",
+        "required": [
+          "stepKey",
+          "name",
+          "stepTypeCode",
+          "sequenceNo"
+        ],
+        "properties": {
+          "stepKey": {
+            "type": "string",
+            "example": "SUBMISSION"
+          },
+          "name": {
+            "type": "string",
+            "example": "Submit Request"
+          },
+          "stepTypeCode": {
+            "type": "string",
+            "example": "START",
+            "description": "Step type code (e.g., START, APPROVAL, FULFILLMENT, CONFIRM)."
+          },
+          "sequenceNo": {
+            "type": "integer",
+            "example": 1
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          },
+          "isSystemRequired": {
+            "type": "boolean",
+            "example": false
+          },
+          "rule": {
+            "$ref": "#/components/schemas/TemplateStepRuleDto"
+          }
+        }
+      },
+      "TemplateTransitionDto": {
+        "type": "object",
+        "required": [
+          "fromStepKey",
+          "actionCode",
+          "toStepKey"
+        ],
+        "properties": {
+          "fromStepKey": {
+            "type": "string",
+            "example": "SUBMISSION"
+          },
+          "actionCode": {
+            "type": "string",
+            "example": "APPROVE"
+          },
+          "toStepKey": {
+            "type": "string",
+            "example": "FULFILL"
+          }
+        }
+      },
+      "UpsertTemplateDefinitionRequest": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateStepDto"
+            }
+          },
+          "transitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateTransitionDto"
+            }
+          }
+        }
+      },
+      "CloneTemplateRequest": {
+        "type": "object",
+        "required": [
+          "newCode",
+          "newName"
+        ],
+        "properties": {
+          "newCode": {
+            "type": "string",
+            "example": "INV_REQ_FLOW_V2"
+          },
+          "newName": {
+            "type": "string",
+            "example": "Inventory Request Flow v2"
+          }
+        }
+      },
+      "StartInstanceRequest": {
+        "type": "object",
+        "required": [
+          "templateId",
+          "businessEntityKey"
+        ],
+        "properties": {
+          "templateId": {
+            "type": "integer",
+            "format": "int64",
+            "example": 1
+          },
+          "businessEntityKey": {
+            "type": "string",
+            "example": "INV_REQ:12345"
+          },
+          "manualAssignments": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/WorkflowManualAssignmentDto"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "X-Idempotency-Key": {
+        "name": "X-Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "Unique key to ensure idempotency. Example: `550e8400-e29b-41d4-a716-446655440000`"
+      },
+      "X-Correlation-Id": {
+        "name": "X-Correlation-Id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Tracing ID for log correlation."
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Authentication and Session Management"
+    },
+    {
+      "name": "Inventory Requests",
+      "description": "Request Lifecycle Management"
+    },
+    {
+      "name": "Workflow",
+      "description": "Task Governance (Claim/Action)"
+    },
+    {
+      "name": "Fulfillment",
+      "description": "Idempotent Stock Operations"
+    },
+    {
+      "name": "Admin",
+      "description": "RBAC and System Configuration"
+    },
+    {
+      "name": "Reference",
+      "description": "Read-only Reference Data"
+    },
+    {
+      "name": "System",
+      "description": "Health and Metadata"
+    }
+  ],
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login",
+        "description": "Returns an access token and sets a standard `refreshToken` HttpOnly cookie.",
+        "operationId": "Login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Refresh Token",
+        "description": "Uses the `refreshToken` cookie to issue a new access token.",
+        "operationId": "Refresh",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid/Expired Token"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Logout",
+        "description": "Invalidates the refresh token session.",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Get Current User",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/requests": {
+      "get": {
+        "tags": [
+          "Inventory Requests"
+        ],
+        "summary": "List Requests",
+        "description": "Lists inventory requests visible to the user based on RBAC scope (OWN, DEPT, WAREHOUSE, GLOBAL).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Inventory Requests"
+        ],
+        "summary": "Create Draft Request",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Long"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/requests/{requestId}": {
+      "get": {
+        "tags": [
+          "Inventory Requests"
+        ],
+        "summary": "Get Request",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Inventory Requests"
+        ],
+        "summary": "Update Draft Request",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      }
+    },
+    "/api/inventory/requests/{requestId}/submit": {
+      "post": {
+        "tags": [
+          "Inventory Requests"
+        ],
+        "summary": "Submit Request",
+        "description": "Transitions request from DRAFT to IN_WORKFLOW.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Submitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitRequestDto"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/requests/{requestId}/cancel": {
+      "post": {
+        "tags": [
+          "Inventory Requests"
+        ],
+        "summary": "Cancel Request",
+        "description": "Cancels request. Only allowed if NO active stock reservations exist.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled"
+          }
+        }
+      }
+    },
+    "/api/workflow/tasks/my": {
+      "get": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "My Tasks",
+        "description": "Returns tasks where the user is an assignee (PENDING) or the claimer (CLAIMED).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "searchTerm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/workflow/templates": {
+      "get": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "List Workflow Templates",
+        "description": "Lists available workflow templates that can be selected when creating requests.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "searchTerm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Create Workflow Template",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTemplateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/api/inventory/requests/{requestId}/fulfillment/reserve": {
+      "post": {
+        "tags": [
+          "Fulfillment"
+        ],
+        "summary": "Reserve Stock",
+        "description": "Idempotent operation to reserve stock. Only allowed if workflow step is FULFILLMENT.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/X-Idempotency-Key"
+          },
+          {
+            "$ref": "#/components/parameters/X-Correlation-Id"
+          },
+          {
+            "name": "X-Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for idempotent fulfillment operations."
+          },
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional correlation id (defaults to trace identifier)."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockMovementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success (or Replay)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Long"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (Missing Key or Invalid State)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Key Conflict (Processing)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/requests/{requestId}/fulfillment/release": {
+      "post": {
+        "tags": [
+          "Fulfillment"
+        ],
+        "summary": "Release Stock",
+        "description": "Reverses a reservation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/X-Idempotency-Key"
+          },
+          {
+            "$ref": "#/components/parameters/X-Correlation-Id"
+          },
+          {
+            "name": "X-Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for idempotent fulfillment operations."
+          },
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional correlation id (defaults to trace identifier)."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockMovementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Long"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/requests/{requestId}/fulfillment/issue": {
+      "post": {
+        "tags": [
+          "Fulfillment"
+        ],
+        "summary": "Issue Stock",
+        "description": "Final issue. Consumes reservation if present.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/X-Idempotency-Key"
+          },
+          {
+            "$ref": "#/components/parameters/X-Correlation-Id"
+          },
+          {
+            "name": "X-Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for idempotent fulfillment operations."
+          },
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional correlation id (defaults to trace identifier)."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockMovementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Long"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference/products": {
+      "get": {
+        "tags": [
+          "Reference"
+        ],
+        "summary": "List Products",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference/products/{id}": {
+      "get": {
+        "tags": [
+          "Reference"
+        ],
+        "summary": "Get Product",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference/categories": {
+      "get": {
+        "tags": [
+          "Reference"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List Categories",
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference/warehouses": {
+      "get": {
+        "tags": [
+          "Reference"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List Warehouses",
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference/stock/levels": {
+      "get": {
+        "tags": [
+          "Reference"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get Stock Levels",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "productId",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Levels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/roles": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Long"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/roles/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/roles/{id}/permissions": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Long"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/version": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Version",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/requests/{requestId}/history": {
+      "get": {
+        "tags": [
+          "Inventory Requests"
+        ],
+        "summary": "Get Request History",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/inventory/requests/{requestId}/fulfillment-details": {
+      "get": {
+        "tags": [
+          "Inventory Requests"
+        ],
+        "summary": "Get Fulfillment Details",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/workflow/tasks/{id}/action": {
+      "post": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Process Action",
+        "description": "Approve, Reject, or Cancel a task.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "X-Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional idempotency key to prevent double-submit of actions."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workflow/tasks/{id}/claim": {
+      "post": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Claim Task",
+        "description": "Atomically claims a task. Fails if already claimed.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already Claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workflow/tasks/{id}/eligible-assignees": {
+      "get": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Get Eligible Assignees",
+        "description": "Returns a list of users eligible to perform actions on this specific task based on workflow rules (Role/Department).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workflow/templates/{templateId}": {
+      "get": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Get Workflow Template",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Update Workflow Template Meta",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTemplateMetaRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/api/workflow/templates/{templateId}/definition": {
+      "put": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Upsert Workflow Template Definition",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTemplateDefinitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/api/workflow/templates/{templateId}/publish": {
+      "post": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Publish Workflow Template",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/api/workflow/templates/{templateId}/clone": {
+      "post": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Clone Workflow Template",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneTemplateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/api/workflow/templates/{templateId}/assignment-options": {
+      "get": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Get Assignment Options",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/workflow/instances/start": {
+      "post": {
+        "tags": [
+          "Workflow"
+        ],
+        "summary": "Start Workflow Instance",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartInstanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/api/admin/permissions": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List Permissions",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "searchTerm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/departments": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List Departments",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/reset-password": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Reset User Password",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_String"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/admin/audit-logs": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List Audit Logs",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "searchTerm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Generic"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }

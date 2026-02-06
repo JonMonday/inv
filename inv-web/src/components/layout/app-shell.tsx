@@ -40,8 +40,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     // Map pathname to title
     const getTitle = () => {
-        if (pathname === '/tasks') return 'My Tasks';
-        if (pathname === '/requests') return 'Inventory Requests';
+        if (pathname === '/tasks') return 'Inbox';
+        if (pathname === '/requests') return 'All Requests';
+        if (pathname === '/requests/drafts') return 'Draft Requests';
+        if (pathname === '/requests/participated') return 'Participated Requests';
         if (pathname.startsWith('/requests/new')) return 'New Request';
         if (pathname.startsWith('/requests/')) return 'Request Details';
         if (pathname.startsWith('/admin/users')) return 'User Management';

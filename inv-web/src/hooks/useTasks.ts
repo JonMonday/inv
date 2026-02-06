@@ -14,6 +14,7 @@ export interface Task {
     requestId: number;
     initiatorUserId: number;
     stepName: string;
+    stepKey: string;
 }
 
 export function useTasks(request: PagedRequest = { pageNumber: 1, pageSize: 20 }) {

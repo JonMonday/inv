@@ -194,10 +194,7 @@ export default function WorkflowBuilderPage() {
 
     const handlePublish = async () => {
         try {
-            await publishMutation.mutateAsync({
-                workflowCode: code,
-                definitionJson: JSON.stringify({ steps })
-            });
+            await publishMutation.mutateAsync(Number(code));
             toast({ title: "Success", description: "Workflow published successfully!" });
         } catch (error: unknown) {
             console.error("Publish error:", error);
@@ -222,7 +219,7 @@ export default function WorkflowBuilderPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Button size="sm" onClick={handlePublish} disabled={publishMutation.isPending}>
-                        <Save className="mr-2 h-4 w-4" /> Publish Version
+                        <Save className="mr-2 h-4 w-4" /> Publish Template
                     </Button>
                 </div>
             </div>

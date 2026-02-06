@@ -18,8 +18,6 @@ public class InvDbContext : DbContext
     public DbSet<RolePermissionScope> RolePermissionScopes => Set<RolePermissionScope>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
-    public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();
-    public DbSet<WorkflowDefinitionVersion> WorkflowDefinitionVersions => Set<WorkflowDefinitionVersion>();
     public DbSet<WorkflowStep> WorkflowSteps => Set<WorkflowStep>();
     public DbSet<WorkflowStepRule> WorkflowStepRules => Set<WorkflowStepRule>();
     public DbSet<WorkflowTransition> WorkflowTransitions => Set<WorkflowTransition>();
@@ -54,6 +52,8 @@ public class InvDbContext : DbContext
     public DbSet<WorkflowConditionOperator> WorkflowConditionOperators => Set<WorkflowConditionOperator>();
     public DbSet<SecurityEventType> SecurityEventTypes => Set<SecurityEventType>();
 
+    public DbSet<WorkflowTemplate> WorkflowTemplates => Set<WorkflowTemplate>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -64,12 +64,57 @@ public class InvDbContext : DbContext
         modelBuilder.Entity<User>().HasIndex(x => x.Username).IsUnique();
         modelBuilder.Entity<User>().HasIndex(x => x.Email).IsUnique();
 
-        // Workflow unique constraints
-        modelBuilder.Entity<WorkflowDefinition>().HasIndex(x => x.Code).IsUnique();
-        modelBuilder.Entity<WorkflowDefinitionVersion>()
-            .HasIndex(x => new { x.WorkflowDefinitionId, x.VersionNo }).IsUnique();
+        // WorkflowTemplate unique constraints
+        modelBuilder.Entity<WorkflowTemplate>().HasIndex(x => x.Code).IsUnique();
+        modelBuilder.Entity<WorkflowTemplate>().HasIndex(x => x.Name).IsUnique();
+
+        // StepKey unique per template
         modelBuilder.Entity<WorkflowStep>()
-            .HasIndex(x => new { x.WorkflowDefinitionVersionId, x.StepKey }).IsUnique();
+            .HasIndex(x => new { x.WorkflowTemplateId, x.StepKey })
+            .IsUnique();
+
+        // Only one rule per step
+        modelBuilder.Entity<WorkflowStepRule>()
+            .HasIndex(x => x.WorkflowStepId)
+            .IsUnique();
+
+        // Only one transition per (template + fromStep + action)
+        modelBuilder.Entity<WorkflowTransition>()
+            .HasIndex(x => new { x.WorkflowTemplateId, x.FromWorkflowStepId, x.WorkflowActionTypeId })
+            .IsUnique();
+
+        // Step <-> Rule 1:1 (delete step = delete rule)
+        modelBuilder.Entity<WorkflowStep>()
+            .HasOne(s => s.Rule)
+            .WithOne(r => r.WorkflowStep)
+            .HasForeignKey<WorkflowStepRule>(r => r.WorkflowStepId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Template deletes steps/transitions (safe for DRAFT cleanup)
+        modelBuilder.Entity<WorkflowTemplate>()
+            .HasMany(t => t.Steps)
+            .WithOne(s => s.WorkflowTemplate)
+            .HasForeignKey(s => s.WorkflowTemplateId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<WorkflowTemplate>()
+            .HasMany(t => t.Transitions)
+            .WithOne(tr => tr.WorkflowTemplate)
+            .HasForeignKey(tr => tr.WorkflowTemplateId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Prevent "cascade cycle" issues on transitions
+        modelBuilder.Entity<WorkflowTransition>()
+            .HasOne(t => t.FromStep)
+            .WithMany()
+            .HasForeignKey(t => t.FromWorkflowStepId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<WorkflowTransition>()
+            .HasOne(t => t.ToStep)
+            .WithMany()
+            .HasForeignKey(t => t.ToWorkflowStepId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Inventory unique constraints
         modelBuilder.Entity<InventoryRequest>().HasIndex(x => x.RequestNo).IsUnique();

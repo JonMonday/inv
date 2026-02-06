@@ -33,15 +33,16 @@ public class InventoryRequest
 
     public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
 
+    [MaxLength(500)]
     public string? Notes { get; set; }
 
     public long? WorkflowInstanceId { get; set; }
     [ForeignKey(nameof(WorkflowInstanceId))]
     public WorkflowInstance? WorkflowInstance { get; set; }
 
-    public long? WorkflowDefinitionId { get; set; }
-    [ForeignKey(nameof(WorkflowDefinitionId))]
-    public WorkflowDefinition? WorkflowDefinition { get; set; }
+    public long? WorkflowTemplateId { get; set; }
+    [ForeignKey(nameof(WorkflowTemplateId))]
+    public WorkflowTemplate? WorkflowTemplate { get; set; }
 
     public ICollection<InventoryRequestLine> Lines { get; set; } = new List<InventoryRequestLine>();
 }

@@ -8,6 +8,7 @@ interface User {
     email: string;
     roles: string[];
     departments: string[];
+    primaryDepartmentId?: number;
 }
 
 interface AuthState {
