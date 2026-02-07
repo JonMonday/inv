@@ -92,3 +92,14 @@ export function useFulfillmentDetails(requestId: number | null) {
         enabled: !!requestId,
     });
 }
+export function useRequestHistory(requestId: number | null) {
+    return useQuery({
+        queryKey: ['requests', requestId, 'history'],
+        queryFn: async () => {
+            if (!requestId) return null;
+            const response = await apiClient.get(`/api/inventory/requests/${requestId}/history`);
+            return response.data.data;
+        },
+        enabled: !!requestId,
+    });
+}

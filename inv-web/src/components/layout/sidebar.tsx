@@ -84,43 +84,43 @@ const navGroups: NavGroup[] = [
             { name: 'Departments', href: '/admin/departments', icon: Box },
         ]
     },
-    {
-        title: 'Reference Data',
-        items: [
-            // Inventory
-            { name: 'Request Status', href: '/admin/reference/inventory-request-status', icon: FileText },
-            { name: 'Request Types', href: '/admin/reference/inventory-request-type', icon: FileText },
-            { name: 'Movement Types', href: '/admin/reference/inventory-movement-type', icon: History },
-            { name: 'Movement Status', href: '/admin/reference/inventory-movement-status', icon: History },
-            { name: 'Reason Codes', href: '/admin/reference/inventory-reason-code', icon: FileText },
-            { name: 'Res. Status', href: '/admin/reference/reservation-status', icon: FileText },
-            // Workflow
-            { name: 'WF Step Types', href: '/admin/reference/workflow-step-type', icon: ClipboardList },
-            { name: 'WF Action Types', href: '/admin/reference/workflow-action-type', icon: ClipboardList },
-            { name: 'WF Assignment', href: '/admin/reference/workflow-assignment-mode', icon: Users },
-            { name: 'WF Conditions', href: '/admin/reference/workflow-condition-operator', icon: Settings },
-            { name: 'WF Inst. Status', href: '/admin/reference/workflow-instance-status', icon: History },
-            { name: 'WF Task Status', href: '/admin/reference/workflow-task-status', icon: ClipboardList },
-            { name: 'WF Assign. Sts', href: '/admin/reference/workflow-task-assignee-status', icon: Users },
-            // System
-            { name: 'Access Scopes', href: '/admin/reference/access-scope-type', icon: ShieldCheck },
-            { name: 'Sec. Events', href: '/admin/reference/security-event-type', icon: ShieldCheck },
-        ]
-    },
-    {
-        title: 'Reporting',
-        items: [
-            { name: 'Reports Center', href: '/reports', icon: BarChart3 },
-            { name: 'Audit Logs', href: '/audit', icon: History },
-        ]
-    },
-    {
-        title: 'Support',
-        items: [
-            { name: 'Settings', href: '/settings', icon: Settings },
-            { name: 'Help & FAQ', href: '/help', icon: HelpCircle },
-        ]
-    }
+    // {
+    //     title: 'Reference Data',
+    //     items: [
+    //         // Inventory
+    //         { name: 'Request Status', href: '/admin/reference/inventory-request-status', icon: FileText },
+    //         { name: 'Request Types', href: '/admin/reference/inventory-request-type', icon: FileText },
+    //         { name: 'Movement Types', href: '/admin/reference/inventory-movement-type', icon: History },
+    //         { name: 'Movement Status', href: '/admin/reference/inventory-movement-status', icon: History },
+    //         { name: 'Reason Codes', href: '/admin/reference/inventory-reason-code', icon: FileText },
+    //         { name: 'Res. Status', href: '/admin/reference/reservation-status', icon: FileText },
+    //         // Workflow
+    //         { name: 'WF Step Types', href: '/admin/reference/workflow-step-type', icon: ClipboardList },
+    //         { name: 'WF Action Types', href: '/admin/reference/workflow-action-type', icon: ClipboardList },
+    //         { name: 'WF Assignment', href: '/admin/reference/workflow-assignment-mode', icon: Users },
+    //         { name: 'WF Conditions', href: '/admin/reference/workflow-condition-operator', icon: Settings },
+    //         { name: 'WF Inst. Status', href: '/admin/reference/workflow-instance-status', icon: History },
+    //         { name: 'WF Task Status', href: '/admin/reference/workflow-task-status', icon: ClipboardList },
+    //         { name: 'WF Assign. Sts', href: '/admin/reference/workflow-task-assignee-status', icon: Users },
+    //         // System
+    //         { name: 'Access Scopes', href: '/admin/reference/access-scope-type', icon: ShieldCheck },
+    //         { name: 'Sec. Events', href: '/admin/reference/security-event-type', icon: ShieldCheck },
+    //     ]
+    // },
+    // {
+    //     title: 'Reporting',
+    //     items: [
+    //         { name: 'Reports Center', href: '/reports', icon: BarChart3 },
+    //         { name: 'Audit Logs', href: '/audit', icon: History },
+    //     ]
+    // },
+    // {
+    //     title: 'Support',
+    //     items: [
+    //         { name: 'Settings', href: '/settings', icon: Settings },
+    //         { name: 'Help & FAQ', href: '/help', icon: HelpCircle },
+    //     ]
+    // }
 ];
 
 export function Sidebar() {

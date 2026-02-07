@@ -314,7 +314,24 @@ public class WorkflowEngine : IWorkflowEngine
 
     private async Task CreateTaskForStepAsync(long instanceId, long stepId, long initiatorUserId)
     {
-        var step = await _db.WorkflowSteps.AsNoTracking().FirstAsync(s => s.WorkflowStepId == stepId);
+        var step = await _db.WorkflowSteps
+            .AsNoTracking()
+            .Include(s => s.StepType)
+            .FirstAsync(s => s.WorkflowStepId == stepId);
+
+        // If this is an END step, we don't create a task. We just mark the instance as completed.
+        if (step.StepType.Code == WorkflowStepTypeCodes.End)
+        {
+            var instance = await _db.WorkflowInstances.FirstOrDefaultAsync(i => i.WorkflowInstanceId == instanceId);
+            if (instance != null)
+            {
+                instance.WorkflowInstanceStatusId = await GetInstanceStatusIdAsync(WorkflowInstanceStatusCodes.Completed);
+                instance.CompletedAt = DateTime.UtcNow;
+                instance.CurrentWorkflowStepId = stepId; // Park it at the end step
+                await _db.SaveChangesAsync();
+            }
+            return;
+        }
 
         var taskStatusId = await GetTaskStatusIdAsync(WorkflowTaskStatusCodes.Pending);
 
@@ -364,6 +381,7 @@ public class WorkflowEngine : IWorkflowEngine
                 AssignedAt = DateTime.UtcNow
             });
         }
+        await _db.SaveChangesAsync();
     }
 
     private async Task<List<long>> ResolveAssigneesForStepAsync(long stepId, WorkflowStepRule? rule, long initiatorUserId)

@@ -1,287 +1,561 @@
 'use client';
 
-import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useRequest, useSubmitRequest, useFulfillment } from '@/hooks/useRequests';
 import { useAuthStore } from '@/store/authStore';
+import { useTasks } from '@/hooks/useTasks';
+import { useRequest, useRequestHistory } from '@/hooks/useRequests';
+import { useState, useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import {
+    Loader2,
+    AlertCircle,
+    ArrowLeft,
+    Calendar,
+    Building2,
+    Warehouse,
+    ClipboardList,
+    CheckCircle2,
+    UserCheck,
+    ShieldCheck,
+    Workflow,
+    Package
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Table,
     TableBody,
     TableCell,
     TableHead,
     TableHeader,
-    TableRow
-} from '@/components/ui/table';
-import { useTasks, Task } from '@/hooks/useTasks';
-import { TaskDrawer } from '../../tasks/task-drawer';
+    TableRow,
+} from "@/components/ui/table";
 import {
-    CheckCircle2,
-    Clock,
-    Package,
-    ArrowRight,
-    ArrowLeft,
-    Loader2,
-    FileText,
-    Warehouse,
-    Building2,
-    Calendar,
-    ClipboardList
-} from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from '@/components/ui/textarea';
+import { WorkflowDiagram } from '@/components/requests/WorkflowDiagram';
 
 export default function RequestDetailPage() {
     const { id } = useParams();
     const router = useRouter();
-    const { toast } = useToast();
     const { user } = useAuthStore();
-    const { data: request, isLoading: isRequestLoading } = useRequest(Number(id));
-    const { tasksQuery } = useTasks();
-    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-    const submitMutation = useSubmitRequest();
-    const fulfillmentMutation = useFulfillment();
+    const { data: request, isLoading } = useRequest(Number(id));
+    const { data: historyData, isLoading: historyLoading } = useRequestHistory(Number(id));
+    const { tasksQuery } = useTasks(); // Fetch my tasks to see if I have one for this request
 
-    if (isRequestLoading || tasksQuery.isLoading) return <div className="p-8"><Loader2 className="animate-spin h-8 w-8" /></div>;
-    if (!request) return <div className="p-8">Request not found</div>;
+    const history = historyData?.history || [];
+    const transitions = historyData?.transitions || [];
+    const rawTasks = historyData?.tasks || [];
+    const manualAssignments = historyData?.manualAssignments || [];
 
-    const myTask = tasksQuery.data?.data?.find(t => t.requestId === Number(id));
+    // Find active task for this request assigned to me
+    const myActiveTask = tasksQuery.data?.data?.find((t: any) =>
+        t.requestId === Number(id) &&
+        (t.status === 'PENDING' || t.status === 'CLAIMED')
+    );
 
-    const isStorekeeper = user?.roles.includes('STOREKEEPER');
+    if (isLoading) return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground animate-pulse">Loading request details...</p>
+        </div>
+    );
+
+    if (!request) return (
+        <div className="max-w-md mx-auto py-20 text-center space-y-4">
+            <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-destructive" />
+            </div>
+            <h2 className="text-xl font-bold">Request Not Found</h2>
+            <p className="text-sm text-muted-foreground">The request you are looking for (REQ-{id}) does not exist or has been removed.</p>
+            <Button onClick={() => router.push('/requests')}>Back to List</Button>
+        </div>
+    );
+
     const isDraft = request.status?.code === 'DRAFT';
-    const isFulfillment = request.status?.code === 'FULFILLMENT';
-
-    const handleSubmit = async () => {
-        try {
-            await submitMutation.mutateAsync({ requestId: Number(id) });
-            toast({ title: 'Request submitted successfully' });
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Unknown error';
-            toast({
-                variant: 'destructive',
-                title: 'Submission failed',
-                description: message
-            });
-        }
-    };
-
-    const handleFulfillment = async (action: 'reserve' | 'release' | 'issue') => {
-        const fulfillmentData = {
-            movementTypeCode: action.toUpperCase(),
-            warehouseId: request.warehouseId,
-            requestId: Number(id),
-            lines: request.lines.map((l: { productId: number, qtyRequested: number }) => ({
-                productId: l.productId,
-                qtyDeltaOnHand: action === 'issue' ? -l.qtyRequested : 0,
-                qtyDeltaReserved: action === 'reserve' ? l.qtyRequested : (action === 'release' ? -l.qtyRequested : 0),
-            }))
-        };
-
-        try {
-            await fulfillmentMutation.mutateAsync({ requestId: Number(id), action, data: fulfillmentData });
-            toast({ title: `Successfully performed ${action}` });
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Unknown error';
-            toast({
-                variant: 'destructive',
-                title: `Fulfillment action failed`,
-                description: message
-            });
-        }
-    };
+    const isCompleted = request.status?.code === 'COMPLETED';
 
     return (
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-6 pb-20 animate-in fade-in duration-500">
+            {/* Header Area */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <Button variant="ghost" size="sm" onClick={() => router.push('/requests')}>
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to List
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-md bg-muted"
+                        onClick={() => router.push('/requests')}
+                    >
+                        <ArrowLeft className="h-4 w-4" />
                     </Button>
-                    <div className="h-4 w-px bg-border" />
-                    <h1 className="text-xl font-bold font-mono">REQ-{id}</h1>
-                    <Badge variant={request.status?.code === 'DRAFT' ? 'outline' : 'default'}>
-                        {request.status?.name || request.status?.code}
-                    </Badge>
-                </div>
-                <div className="flex gap-2">
-                    {isDraft && (
-                        <>
-                            <Button variant="outline" size="sm">Edit Draft</Button>
-                            <Button size="sm" onClick={handleSubmit} disabled={submitMutation.isPending}>
-                                {submitMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Submit Request
-                            </Button>
-                        </>
-                    )}
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-bold tracking-tight font-mono">REQ-{id}</h1>
+                            <Badge variant={isDraft ? 'outline' : (isCompleted ? 'default' : 'secondary')} className="uppercase text-[9px] font-bold tracking-widest px-2">
+                                {request.status?.name || request.status?.code}
+                            </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Initiated on {new Date(request.requestedAt).toLocaleDateString()}
+                        </p>
+                    </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="lg:col-span-3 space-y-6">
+
+                    {/* Inline Action Panel */}
+                    {myActiveTask && (
+                        <TaskActionPanel
+                            task={myActiveTask}
+                            request={request}
+                            isStorekeeper={!!user?.roles.includes('STOREKEEPER')}
+                        />
+                    )}
+
                     <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <FileText className="h-4 w-4" /> Request Items
+                        <CardHeader className="border-b py-4">
+                            <CardTitle className="text-sm font-bold uppercase tracking-tight">Request Details</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-6 grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Department</label>
+                                <div className="h-10 px-3 flex items-center bg-muted/10 border rounded-md font-medium text-sm">
+                                    <Building2 className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                    {request.department?.name || `Dept-${request.departmentId}`}
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Warehouse</label>
+                                <div className="h-10 px-3 flex items-center bg-muted/10 border rounded-md font-medium text-sm">
+                                    <Warehouse className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                    {request.warehouse?.name || `WH-${request.warehouseId}`}
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-2 space-y-2">
+                                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Justification</label>
+                                <div className="p-4 bg-muted/5 border rounded-md text-sm leading-relaxed whitespace-pre-wrap">
+                                    {request.notes || 'No notes provided for this request.'}
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-2 space-y-4">
+                                <div className="flex items-center justify-between border-b pb-2 mt-4">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest text-primary">Requested Items</h3>
+                                    <p className="text-[10px] text-muted-foreground italic">{request.lines?.length || 0} Products Included</p>
+                                </div>
+
+                                <div className="rounded-md border overflow-hidden shadow-sm">
+                                    <Table>
+                                        <TableHeader className="bg-muted/50 border-b">
+                                            <TableRow>
+                                                <TableHead className="w-12 text-center text-[10px] font-bold uppercase tracking-widest">#</TableHead>
+                                                <TableHead className="text-[10px] font-bold uppercase tracking-widest">Description</TableHead>
+                                                <TableHead className="text-center text-[10px] font-bold uppercase tracking-widest w-24">Req</TableHead>
+                                                <TableHead className="text-center text-[10px] font-bold uppercase tracking-widest w-24">Appr</TableHead>
+                                                <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest w-24 pr-6">Fulfilled</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody className="divide-y">
+                                            {request.lines.map((line: any, index: number) => (
+                                                <TableRow key={line.requestLineId} className="hover:bg-accent/5 transition-colors h-14">
+                                                    <td className="p-3 text-center text-xs text-muted-foreground font-mono">{index + 1}</td>
+                                                    <TableCell>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-foreground text-sm">{line.product?.name || `Prod-${line.productId}`}</span>
+                                                            <span className="text-[10px] text-muted-foreground font-mono uppercase">{line.product?.sku || `SKU-${line.productId}`}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono font-bold text-sm bg-muted/5">{line.qtyRequested}</TableCell>
+                                                    <TableCell className="text-center font-mono text-sm text-muted-foreground">{line.qtyApproved || '-'}</TableCell>
+                                                    <TableCell className="text-right pr-6 font-mono font-bold text-sm text-primary">{line.qtyFulfilled || 0}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                <div className="flex items-center justify-between border-b pb-2">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest text-primary">Workflow Diagrams & History</h3>
+                                    <Badge variant="outline" className="text-[10px] font-bold tracking-widest px-2 py-0">Audit View</Badge>
+                                </div>
+
+                                <div className="space-y-6">
+                                    <div className="p-4 bg-muted/5 border rounded-lg">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-4">Process Visual Diagram</p>
+                                        <WorkflowDiagram steps={history} transitions={transitions} />
+                                        <div className="flex items-center gap-6 justify-center pt-4">
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="h-2.5 w-2.5 rounded-full bg-primary" />
+                                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Completed</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="h-2.5 w-2.5 rounded-full border-2 border-primary bg-primary/5" />
+                                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Active</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="h-2.5 w-2.5 rounded-full border border-dashed border-border" />
+                                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Pending</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-2">
+                                            <ClipboardList className="h-4 w-4 text-primary" />
+                                            <h4 className="text-xs font-bold uppercase tracking-widest">Chronological Task log</h4>
+                                        </div>
+                                        <div className="rounded-md border overflow-hidden">
+                                            <table className="w-full text-[11px]">
+                                                <thead>
+                                                    <tr className="bg-muted/50 border-b">
+                                                        <th className="p-2 text-left font-bold uppercase tracking-widest text-muted-foreground">Task Step</th>
+                                                        <th className="p-2 text-center font-bold uppercase tracking-widest text-muted-foreground">Status</th>
+                                                        <th className="p-2 text-left font-bold uppercase tracking-widest text-muted-foreground">Assignees / ClaimedBy</th>
+                                                        <th className="p-2 text-right font-bold uppercase tracking-widest text-muted-foreground">Completed</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y">
+                                                    {rawTasks.length > 0 ? rawTasks.map((t: any) => (
+                                                        <tr key={t.workflowTaskId} className="hover:bg-accent/5 transition-colors">
+                                                            <td className="p-2 font-bold">{t.stepName}</td>
+                                                            <td className="p-2 text-center">
+                                                                <Badge variant={t.statusCode === 'COMPLETED' ? 'default' : 'outline'} className="text-[8px] h-4 px-1">
+                                                                    {t.status}
+                                                                </Badge>
+                                                            </td>
+                                                            <td className="p-2 text-muted-foreground">
+                                                                {t.claimedBy ? (
+                                                                    <span className="font-bold text-foreground">Done by: {t.claimedBy.displayName}</span>
+                                                                ) : (
+                                                                    <span>Assigned to: {t.assignees.map((a: any) => a.displayName).join(', ') || 'N/A'}</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="p-2 text-right tabular-nums text-muted-foreground">
+                                                                {t.completedAt ? new Date(t.completedAt).toLocaleString() : '-'}
+                                                            </td>
+                                                        </tr>
+                                                    )) : (
+                                                        <tr>
+                                                            <td colSpan={4} className="p-8 text-center text-muted-foreground italic">No tasks created yet.</td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Workflow Tracker Sidebar */}
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader className="border-b py-4">
+                            <CardTitle className="text-sm font-bold uppercase tracking-tight flex items-center gap-2">
+                                <Workflow className="h-4 w-4 text-primary" />
+                                Process Flow
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0">
+                        <CardContent className="pt-6 px-4 space-y-3">
+                            {historyLoading ? (
+                                <div className="flex justify-center py-6">
+                                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : history?.map((step: any, idx: number) => {
+                                const isDone = step.status === 'COMPLETED';
+                                const isActive = step.status === 'AVAILABLE' || step.status === 'CLAIMED' || step.status === 'ACTIVE';
+
+                                // Find explicit manual assignments for this step
+                                const stepManualAssignments = manualAssignments
+                                    .filter((ma: any) => ma.workflowStepId === step.workflowStepId)
+                                    .map((ma: any) => ma.userDisplayName);
+
+                                return (
+                                    <div
+                                        key={step.workflowStepId}
+                                        className={`p-4 rounded-lg border transition-all duration-300 ${isActive ? 'bg-primary/5 border-primary shadow-sm' : 'bg-muted/10 border-border/50'}`}
+                                    >
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isDone ? 'bg-primary text-primary-foreground' : (isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground')}`}>
+                                                    {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : idx + 1}
+                                                </div>
+                                                <p className={`text-xs font-bold uppercase tracking-tight ${isActive ? 'text-primary' : 'text-foreground'}`}>{step.stepName}</p>
+                                            </div>
+                                            <Badge variant={isDone ? 'default' : (isActive ? 'secondary' : 'outline')} className="text-[8px] uppercase font-bold tracking-widest px-1.5 py-0">
+                                                {isDone ? 'Completed' : (isActive ? 'Current' : 'Planned')}
+                                            </Badge>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-start gap-2">
+                                                <UserCheck className={`h-3 w-3 mt-0.5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                                                <p className="text-[10px] leading-tight flex-1">
+                                                    <span className="font-bold text-muted-foreground uppercase tracking-widest mr-1">Assignee:</span>
+                                                    <span className="font-semibold text-foreground">
+                                                        {(step.assignees || []).map((a: any) => a.displayName).join(', ') || 'To be determined'}
+                                                    </span>
+                                                </p>
+                                            </div>
+
+                                            {stepManualAssignments.length > 0 && !isDone && (
+                                                <div className="flex items-start gap-2 pt-1 border-t border-dashed mt-1">
+                                                    <ShieldCheck className="h-3 w-3 mt-0.5 text-primary/60" />
+                                                    <p className="text-[9px] leading-tight italic">
+                                                        <span className="font-bold text-muted-foreground uppercase tracking-widest mr-1">Pre-Selected:</span>
+                                                        <span className="text-foreground">{stepManualAssignments.join(', ')}</span>
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {isDone && step.completedAt && (
+                                                <div className="flex items-start gap-2">
+                                                    <Calendar className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                                                    <p className="text-[10px] leading-tight">
+                                                        <span className="font-bold text-muted-foreground uppercase tracking-widest mr-1">Action At:</span>
+                                                        <span className="text-muted-foreground">
+                                                            {new Date(step.completedAt).toLocaleDateString()}
+                                                        </span>
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="bg-muted/10 border-dashed">
+                        <CardContent className="pt-6 flex flex-col items-center text-center gap-3">
+                            <div className="p-3 rounded-full bg-background border border-border shadow-sm">
+                                <Building2 className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs font-bold uppercase tracking-widest">Process Transparency</p>
+                                <p className="text-[10px] text-muted-foreground">This view shows all steps including historical actions and planned assignees.</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        </div >
+    );
+}
+
+function TaskActionPanel({ task, request, isStorekeeper }: { task: any, request: any, isStorekeeper: boolean }) {
+    const { actionMutation, claimMutation } = useTasks();
+    const { toast } = useToast();
+    const [notes, setNotes] = useState('');
+    const [selectedWarehouses, setSelectedWarehouses] = useState<Record<number, number>>({});
+
+    // Auto-preselect warehouse if only one option exists or if item already fulfilled
+    useEffect(() => {
+        if (request?.lines) {
+            const preselection: Record<number, number> = {};
+            request.lines.forEach((line: any) => {
+                if (line.stock && line.stock.length === 1) {
+                    preselection[line.productId] = line.stock[0].warehouseId;
+                }
+            });
+            setSelectedWarehouses(prev => ({ ...prev, ...preselection }));
+        }
+    }, [request]);
+
+    const isFulfillmentStep = task.stepKey === 'FULFILL' || task.stepKey === 'FULFILLMENT' || task.stepName === 'Fulfillment';
+    const isStartStep = task.stepKey === 'START' || task.stepKey === 'SUBMISSION';
+    const isClaimedByMe = task.claimedByUserId && task.claimedByUserId !== 0; // Simplified check since we only render this if it's "my task"
+
+    // We assume if we have the task, it's either claimed by us or we are an assignee.
+    // Ideally we should claim it first if it's just 'assigned' but not 'claimed'.
+    // But for this simplified view, let's assume if it shows up in "My Tasks", I can act on it.
+    // If we want to enforce explicit claim:
+    const needsClaim = !task.claimedByUserId;
+
+    const handleClaim = async () => {
+        try {
+            await claimMutation.mutateAsync(task.id);
+            toast({ title: 'Task claimed successfully' });
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Failed to claim task' });
+        }
+    };
+
+    const handleAction = async (action: 'APPROVE' | 'REJECT' | 'CANCEL' | 'SUBMIT') => {
+        try {
+            let actualAction: string = action;
+            if (task.stepKey === 'START' && action === 'APPROVE') {
+                actualAction = 'SUBMIT';
+            } else if (isFulfillmentStep && action === 'APPROVE') {
+                actualAction = 'COMPLETE';
+            }
+
+            const payload: any = {};
+            if (isFulfillmentStep && action === 'APPROVE') {
+                payload.fulfillments = Object.entries(selectedWarehouses).map(([productId, warehouseId]) => ({
+                    productId: Number(productId),
+                    warehouseId
+                }));
+            }
+
+            await actionMutation.mutateAsync({
+                taskId: task.id,
+                action: actualAction as any,
+                notes,
+                payloadJson: JSON.stringify(payload)
+            });
+            toast({ title: `Task ${actualAction.toLowerCase()}d successfully` });
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: `Failed to ${action.toLowerCase()} task`,
+                description: error.message || 'Unknown error'
+            });
+        }
+    };
+
+    if (needsClaim) {
+        return (
+            <Card className="border-primary/50 bg-primary/5 mb-6">
+                <CardHeader className="py-4">
+                    <CardTitle className="text-sm font-bold uppercase tracking-tight flex items-center gap-2 text-primary">
+                        <CheckCircle2 className="h-4 w-4" /> Action Required: {task.stepName}
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                    <p className="text-sm text-muted-foreground">You are a candidate for this task. Claim it to start working.</p>
+                    <Button onClick={handleClaim} disabled={claimMutation.isPending} className="w-fit">
+                        {claimMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        Claim Task
+                    </Button>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <Card className="border-primary shadow-md bg-white mb-6 animate-in slide-in-from-top-2">
+            <CardHeader className="border-b bg-primary/5 py-4">
+                <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-bold uppercase tracking-tight flex items-center gap-2 text-primary">
+                        <CheckCircle2 className="h-4 w-4" /> Current Task: {task.stepName}
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[10px] bg-background">Assigned to You</Badge>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-6">
+                {isFulfillmentStep && (
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                            <Package className="h-3.5 w-3.5" />
+                            Fulfillment: Select Source Warehouses
+                        </h3>
+                        <div className="rounded-md border overflow-hidden">
                             <Table>
-                                <TableHeader>
+                                <TableHeader className="bg-muted/50">
                                     <TableRow>
-                                        <TableHead className="pl-6">Product</TableHead>
-                                        <TableHead>Requested</TableHead>
-                                        <TableHead>Approved</TableHead>
-                                        <TableHead className="pr-6 text-right">Fulfilling</TableHead>
+                                        <TableHead className="h-8 text-[10px] font-bold uppercase tracking-widest">Item</TableHead>
+                                        <TableHead className="h-8 text-center text-[10px] font-bold uppercase tracking-widest w-20">Qty</TableHead>
+                                        <TableHead className="h-8 text-[10px] font-bold uppercase tracking-widest">Source Warehouse</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {request.lines.map((line: any) => (
-                                        <TableRow key={line.requestLineId}>
-                                            <TableCell className="pl-6">
-                                                <div className="font-medium text-sm">{line.product?.name || `Prod-${line.productId}`}</div>
-                                                <div className="text-[10px] text-muted-foreground uppercase">{line.product?.sku || `SKU-${line.productId}`}</div>
+                                    {request.lines?.map((line: any) => (
+                                        <TableRow key={line.productId}>
+                                            <TableCell className="py-2 text-xs font-bold">{line.product?.name}</TableCell>
+                                            <TableCell className="py-2 text-center text-xs font-mono">{line.qtyRequested}</TableCell>
+                                            <TableCell className="py-2">
+                                                <Select
+                                                    value={selectedWarehouses[line.productId] ? String(selectedWarehouses[line.productId]) : ""}
+                                                    onValueChange={(val) => setSelectedWarehouses(prev => ({ ...prev, [line.productId]: Number(val) }))}
+                                                >
+                                                    <SelectTrigger className={cn("h-8 text-xs", !selectedWarehouses[line.productId] && "border-destructive/50")}>
+                                                        <SelectValue placeholder="Select Source..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {line.stock?.map((s: any) => (
+                                                            <SelectItem key={s.warehouseId} value={String(s.warehouseId)}>
+                                                                <span className="flex items-center gap-2">
+                                                                    <span>{s.warehouseName}</span>
+                                                                    <Badge variant="secondary" className="text-[9px] h-4 px-1">{s.availableQty} Avail</Badge>
+                                                                </span>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                             </TableCell>
-                                            <TableCell className="text-sm">{line.qtyRequested}</TableCell>
-                                            <TableCell className="text-sm">{line.qtyApproved || '-'}</TableCell>
-                                            <TableCell className="pr-6 text-right font-medium">{line.qtyFulfilled || 0}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
+                )}
 
-                    {isStorekeeper && isFulfillment && (
-                        <Card className="border-primary/20 bg-primary/5">
-                            <CardHeader>
-                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                    <Package className="h-4 w-4" /> Fulfillment Actions
-                                </CardTitle>
-                                <CardDescription>As a Storekeeper, you can manage stock for this request</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex gap-3">
-                                <Button size="sm" onClick={() => handleFulfillment('reserve')}>Reserve Stock</Button>
-                                <Button size="sm" variant="outline" onClick={() => handleFulfillment('release')}>Release Reserve</Button>
-                                <div className="flex-1" />
-                                <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleFulfillment('issue')}>Issue Items</Button>
-                            </CardContent>
-                        </Card>
-                    )}
+                <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Notes / Remarks</label>
+                    <Textarea
+                        placeholder="Add any comments regarding your action..."
+                        className="resize-none text-sm"
+                        rows={3}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                    />
                 </div>
 
-                <div className="space-y-6">
-                    {myTask && (
-                        <Card className="border-blue-200 bg-blue-50/50">
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-semibold flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <ClipboardList className="h-4 w-4 text-blue-600" />
-                                        Your Assigned Task
-                                    </div>
-                                    <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200 capitalize">
-                                        {myTask.status.toLowerCase()}
-                                    </Badge>
-                                </CardTitle>
-                                <CardDescription className="text-[10px] leading-relaxed">
-                                    You have an active <strong>{myTask.stepName}</strong> task. Please review and take action.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Button size="sm" className="w-full h-8 text-xs font-semibold" onClick={() => setSelectedTask(myTask)}>
-                                    Process Task
-                                </Button>
-                            </CardContent>
-                        </Card>
+                <div className="flex items-center gap-3 pt-2">
+                    <Button
+                        onClick={() => handleAction('APPROVE')}
+                        className="flex-1"
+                        disabled={actionMutation.isPending || (isFulfillmentStep && request.lines?.some((l: any) => !selectedWarehouses[l.productId]))}
+                    >
+                        {actionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                        {isFulfillmentStep ? "Complete Fulfillment" : (isStartStep ? "Submit Request" : "Approve")}
+                    </Button>
+
+                    {!isStartStep && (
+                        <Button
+                            variant="destructive"
+                            onClick={() => handleAction('REJECT')}
+                            disabled={actionMutation.isPending}
+                        >
+                            Reject
+                        </Button>
                     )}
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Summary</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between text-sm">
-                                <div className="flex items-center text-muted-foreground">
-                                    <Warehouse className="mr-2 h-4 w-4" /> Warehouse
-                                </div>
-                                <span className="font-medium">{request.warehouse?.name || `WH-${request.warehouseId}`}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                                <div className="flex items-center text-muted-foreground">
-                                    <Building2 className="mr-2 h-4 w-4" /> Department
-                                </div>
-                                <span className="font-medium">{request.department?.name || `Dept-${request.departmentId}`}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                                <div className="flex items-center text-muted-foreground">
-                                    <Calendar className="mr-2 h-4 w-4" /> Created
-                                </div>
-                                <span className="font-medium">{new Date(request.requestedAt).toLocaleDateString()}</span>
-                            </div>
-                            <div className="pt-2 border-t">
-                                <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Notes</p>
-                                <p className="text-xs">{request.notes || 'No notes provided'}</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Timeline</CardTitle>
-                        </CardHeader>
-                        <CardContent className="relative pl-8 space-y-6">
-                            <div className="absolute left-[19px] top-6 bottom-6 w-[2px] bg-border" />
-
-                            <TimelineItem
-                                title="Draft Created"
-                                subtitle={new Date(request.requestedAt).toLocaleDateString()}
-                                icon={<Clock className="h-3 w-3" />}
-                                isCompleted={true}
-                            />
-                            <TimelineItem
-                                title="Workflow"
-                                subtitle={request.status?.code === 'DRAFT' ? 'Pending submission' : 'In Progress'}
-                                icon={<ArrowRight className="h-3 w-3" />}
-                                isCompleted={!isDraft}
-                                active={request.status?.code === 'IN_WORKFLOW'}
-                            />
-                            <TimelineItem
-                                title="Fulfillment"
-                                subtitle="Warehouse release"
-                                icon={<Package className="h-3 w-3" />}
-                                isCompleted={request.status?.code === 'COMPLETED'}
-                                active={isFulfillment}
-                            />
-                            <TimelineItem
-                                title="Completed"
-                                subtitle="All items issued"
-                                icon={<CheckCircle2 className="h-3 w-3" />}
-                                isCompleted={request.status?.code === 'COMPLETED'}
-                            />
-                        </CardContent>
-                    </Card>
                 </div>
-            </div>
-
-            <TaskDrawer
-                task={selectedTask}
-                isOpen={!!selectedTask}
-                onClose={() => setSelectedTask(null)}
-            />
-        </div>
+            </CardContent>
+        </Card>
     );
 }
 
-function TimelineItem({ title, subtitle, icon, isCompleted, active }: { title: string, subtitle: string, icon: React.ReactNode, isCompleted: boolean, active?: boolean }) {
-    return (
-        <div className="relative">
-            <div className={`absolute -left-[27px] flex h-5 w-5 items-center justify-center rounded-full border bg-background z-10 ${isCompleted ? 'border-primary text-primary' : (active ? 'border-primary' : 'text-muted-foreground')}`}>
-                {icon}
-            </div>
-            <div className="space-y-0.5">
-                <p className={`text-xs font-semibold ${active ? 'text-primary' : ''}`}>{title}</p>
-                <p className="text-[10px] text-muted-foreground">{subtitle}</p>
-            </div>
-        </div>
-    );
+
+
+function TimelineItem({
+    title,
+    subtitle,
+    icon,
+    isCompleted,
+    active
+}: {
+    title: string;
+    subtitle: string;
+    icon: React.ReactNode;
+    isCompleted: boolean;
+    active?: boolean;
+}) {
+    // This is now deprecated but kept for backward compatibility if needed elsewhere
+    return null;
 }

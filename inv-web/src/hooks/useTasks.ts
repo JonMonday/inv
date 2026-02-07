@@ -41,7 +41,7 @@ export function useTasks(request: PagedRequest = { pageNumber: 1, pageSize: 20 }
     const actionMutation = useMutation({
         mutationFn: async ({ taskId, action, notes, payloadJson }: {
             taskId: number;
-            action: 'APPROVE' | 'REJECT' | 'CANCEL';
+            action: 'APPROVE' | 'REJECT' | 'CANCEL' | 'COMPLETE';
             notes?: string;
             payloadJson?: string;
         }) => {

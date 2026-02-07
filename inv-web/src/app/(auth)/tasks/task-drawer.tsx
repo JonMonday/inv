@@ -82,9 +82,15 @@ export function TaskDrawer({
 
     const handleAction = async (action: 'APPROVE' | 'REJECT' | 'CANCEL' | 'SUBMIT') => {
         try {
-            const actualAction = (task.stepKey === 'START' && action === 'APPROVE') ? 'SUBMIT' : action;
+            let actualAction: string = action;
+            if (task.stepKey === 'START' && action === 'APPROVE') {
+                actualAction = 'SUBMIT';
+            } else if (isFulfillmentStep && action === 'APPROVE') {
+                actualAction = 'COMPLETE';
+            }
+
             const payload: any = { nextAssigneeUserId: nextAssigneeId || undefined };
-            if (task.stepKey === 'FULFILL' && action === 'APPROVE') {
+            if (isFulfillmentStep && action === 'APPROVE') {
                 console.log('🔍 DEBUG: selectedWarehouses state:', selectedWarehouses);
                 payload.fulfillments = Object.entries(selectedWarehouses).map(([productId, warehouseId]) => ({
                     productId: Number(productId),
@@ -100,7 +106,7 @@ export function TaskDrawer({
                 notes,
                 payloadJson: JSON.stringify(payload)
             });
-            toast({ title: `Task ${actualAction.toLowerCase()}ed successfully` });
+            toast({ title: `Task ${actualAction.toLowerCase()}d successfully` });
             onClose();
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown error';
@@ -117,8 +123,8 @@ export function TaskDrawer({
     const isClaimedByOther = task.claimedByUserId && !isClaimedByMe;
     const canAct = !isClaimedByOther;
     const isRequester = user?.userId === task.initiatorUserId;
-    const isFulfillmentStep = task.stepKey === 'FULFILL' || task.stepName === 'Fulfillment';
-    const isStartStep = task.stepKey === 'START';
+    const isFulfillmentStep = task.stepKey === 'FULFILL' || task.stepKey === 'FULFILLMENT' || task.stepName === 'Fulfillment';
+    const isStartStep = task.stepKey === 'START' || task.stepKey === 'SUBMISSION';
 
     return (
         <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()} direction="right">

@@ -189,8 +189,8 @@ export default function NewRequestPage() {
                 setPhase('success');
                 toast({ title: 'Request submitted successfully' });
             } else {
-                toast({ title: 'Draft created successfully' });
-                router.push('/requests/drafts');
+                toast({ title: 'Draft saved successfully' });
+                // We stay on the page as requested
             }
         } catch (error: any) {
             const message = error.response?.data?.message || error.message || 'Unknown error';

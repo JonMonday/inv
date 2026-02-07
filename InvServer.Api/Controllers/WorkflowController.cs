@@ -612,7 +612,11 @@ public class WorkflowController : ControllerBase
         var requestId = ExtractRequestId(task.WorkflowInstance.BusinessEntityKey);
 
         // Your stock logic stays here (controller knows about inventory domain)
-        if (!string.IsNullOrEmpty(request.PayloadJson) && stepKey == "FULFILL")
+        var isFulfillmentStep = stepKey == "FULFILL" || stepKey == "FULFILLMENT";
+        var isConfirmationStep = stepKey == "CONFIRM" || stepKey == "CONFIRMATION";
+        var isApprovalOrCompletion = request.ActionCode == WorkflowActionCodes.Approve || request.ActionCode == WorkflowActionCodes.Complete;
+
+        if (!string.IsNullOrEmpty(request.PayloadJson) && isFulfillmentStep)
         {
             try
             {
@@ -621,26 +625,28 @@ public class WorkflowController : ControllerBase
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 if (payload?.Fulfillments != null && payload.Fulfillments.Any() &&
-                    requestId.HasValue && request.ActionCode == WorkflowActionCodes.Approve)
+                    requestId.HasValue && isApprovalOrCompletion)
                 {
-                    var byWarehouse = payload.Fulfillments.GroupBy(f => f.WarehouseId);
-                    foreach (var group in byWarehouse)
+                    foreach (var fulfillment in payload.Fulfillments)
                     {
                         var movementReq = new StockMovementRequest
                         {
-                            WarehouseId = group.Key,
+                            WarehouseId = fulfillment.WarehouseId,
                             MovementTypeCode = MovementTypeCodes.Reserve,
                             RequestId = requestId.Value,
                             UserId = userId,
                             Notes = "Fulfillment automated reservation",
-                            Lines = group.Select(f => new StockMovementLineRequest
+                            Lines = new List<StockMovementLineRequest>
                             {
-                                ProductId = f.ProductId,
-                                QtyDeltaReserved = GetRequestedQty(requestId.Value, f.ProductId)
-                            }).ToList()
+                                new StockMovementLineRequest
+                                {
+                                    ProductId = fulfillment.ProductId,
+                                    QtyDeltaReserved = GetRequestedQty(requestId.Value, fulfillment.ProductId)
+                                }
+                            }
                         };
 
-                        var idemKey = !string.IsNullOrEmpty(idem) ? $"{idem}:fulfill:{id}:{group.Key}" : $"fulfill:{id}:{group.Key}";
+                        var idemKey = !string.IsNullOrEmpty(idem) ? $"{idem}:fulfill:{id}:{fulfillment.ProductId}" : $"fulfill:{id}:{fulfillment.ProductId}";
                         await _stockService.PostMovementAsync(movementReq, HttpContext.TraceIdentifier, $"workflow:task:{id}", idemKey);
                     }
                 }
@@ -651,7 +657,7 @@ public class WorkflowController : ControllerBase
             }
         }
 
-        if (stepKey == "CONFIRM" && request.ActionCode == WorkflowActionCodes.Approve && requestId.HasValue)
+        if (isConfirmationStep && isApprovalOrCompletion && requestId.HasValue)
         {
             try
             {
@@ -668,8 +674,8 @@ public class WorkflowController : ControllerBase
                         .Select(g => new StockMovementLineRequest
                         {
                             ProductId = g.Key,
-                            QtyDeltaOnHand = -g.Sum(l => l.QtyDeltaReserved),
-                            QtyDeltaReserved = -g.Sum(l => l.QtyDeltaReserved)
+                            QtyDeltaOnHand = -g.Sum(l => l.QtyDeltaReserved), // Deduct physically
+                            QtyDeltaReserved = -g.Sum(l => l.QtyDeltaReserved) // Release reservation
                         }).ToList();
 
                     var issueReq = new StockMovementRequest
@@ -678,7 +684,7 @@ public class WorkflowController : ControllerBase
                         MovementTypeCode = MovementTypeCodes.Issue,
                         RequestId = requestId.Value,
                         UserId = userId,
-                        Notes = "Requestor confirmation - stock issued",
+                        Notes = "Requester confirmation - stock issued",
                         Lines = lines
                     };
 
