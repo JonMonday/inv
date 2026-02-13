@@ -7,13 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ClipboardList, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { TaskDrawer } from './task-drawer';
 import { PaginationControls } from '@/components/ui/pagination-controls';
+import Link from 'next/link';
 
 export default function TasksPage() {
     const [page, setPage] = useState(1);
     const { tasksQuery } = useTasks({ pageNumber: page, pageSize: 20 });
-    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
     const backlogStatuses = ['PENDING', 'AVAILABLE'];
     const backlog = tasksQuery.data?.data?.filter(t => backlogStatuses.includes(t.status)) || [];
@@ -45,19 +44,11 @@ export default function TasksPage() {
                 title="In Progress"
                 count={inProgress.length}
                 tasks={inProgress}
-                onSelect={setSelectedTask}
             />
             <TaskSection
                 title="Backlog"
                 count={backlog.length}
                 tasks={backlog}
-                onSelect={setSelectedTask}
-            />
-
-            <TaskDrawer
-                task={selectedTask}
-                isOpen={!!selectedTask}
-                onClose={() => setSelectedTask(null)}
             />
 
             <PaginationControls
@@ -74,13 +65,11 @@ export default function TasksPage() {
 function TaskSection({
     title,
     count,
-    tasks,
-    onSelect
+    tasks
 }: {
     title: string;
     count: number;
     tasks: Task[];
-    onSelect: (task: Task) => void
 }) {
     return (
         <div className="space-y-3">
@@ -98,10 +87,10 @@ function TaskSection({
                 ) : (
                     <div className="divide-y">
                         {tasks.map((task) => (
-                            <div
+                            <Link
                                 key={task.id}
+                                href={`/requests/${task.requestId}`}
                                 className="group flex items-center justify-between p-4 transition-colors hover:bg-accent/50 cursor-pointer"
-                                onClick={() => onSelect(task)}
                             >
                                 <div className="flex items-center gap-4">
                                     <div className={cn(
@@ -128,7 +117,7 @@ function TaskSection({
                                         </AvatarFallback>
                                     </Avatar>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
                 )}

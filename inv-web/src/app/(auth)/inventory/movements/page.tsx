@@ -1,5 +1,8 @@
 'use client';
 
+import React, { useState, useCallback } from 'react';
+
+import Link from 'next/link';
 import { useMovements } from '@/hooks/useInventory';
 import {
     Table,
@@ -18,12 +21,22 @@ import {
     User,
     Calendar,
     Warehouse as WarehouseIcon,
-    Tag
+    Tag,
+    ChevronDown,
+    ChevronRight,
+    Plus,
+    Package
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useState, useCallback } from 'react';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { debounce } from 'lodash';
+
+interface StockMovementLine {
+    productId: number;
+    productName: string;
+    qtyDeltaOnHand: number;
+    qtyDeltaReserved: number;
+}
 
 interface StockMovement {
     stockMovementId: number;
@@ -34,11 +47,13 @@ interface StockMovement {
     referenceNo?: string;
     warehouseId: number;
     linesCount: number;
+    lines: StockMovementLine[];
 }
 
 export default function StockMovementsPage() {
     const [page, setPage] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
+    const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
     const { data: movementsData, isLoading } = useMovements({ pageNumber: page, pageSize: 20, searchTerm });
 
     const movements = movementsData?.data || [];
@@ -53,6 +68,16 @@ export default function StockMovementsPage() {
         []
     );
 
+    const toggleRow = (id: number) => {
+        const newSet = new Set(expandedRows);
+        if (newSet.has(id)) {
+            newSet.delete(id);
+        } else {
+            newSet.add(id);
+        }
+        setExpandedRows(newSet);
+    };
+
     const getMovementBadge = (type: string) => {
         const types: Record<string, { color: string, icon: React.ReactNode }> = {
             'RESERVE': { color: 'bg-blue-500/10 text-blue-500 border-blue-500/20', icon: <Tag className="h-3 w-3" /> },
@@ -60,6 +85,10 @@ export default function StockMovementsPage() {
             'CONSUME_RESERVE': { color: 'bg-purple-500/10 text-purple-500 border-purple-500/20', icon: <ArrowRightLeft className="h-3 w-3" /> },
             'RELEASE': { color: 'bg-orange-500/10 text-orange-500 border-orange-500/20', icon: <ArrowRightLeft className="h-3 w-3" /> },
             'ADJUST': { color: 'bg-gray-500/10 text-gray-500 border-gray-500/20', icon: <Tag className="h-3 w-3" /> },
+            'RECEIPT': { color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20', icon: <Plus className="h-3 w-3" /> },
+            'ADJUSTMENT_IN': { color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20', icon: <Plus className="h-3 w-3" /> },
+            'ADJUSTMENT_OUT': { color: 'bg-rose-500/10 text-rose-500 border-rose-500/20', icon: <Plus className="h-3 w-3" /> },
+            'RETURN_IN': { color: 'bg-blue-500/10 text-blue-500 border-blue-500/20', icon: <Plus className="h-3 w-3" /> },
         };
         const config = types[type] || { color: 'bg-slate-500/10 text-slate-500 border-slate-500/20', icon: <Tag className="h-3 w-3" /> };
         return (
@@ -101,7 +130,7 @@ export default function StockMovementsPage() {
                             <TableHead>Reference</TableHead>
                             <TableHead>Warehouse</TableHead>
                             <TableHead>Performed By</TableHead>
-                            <TableHead className="text-right">Lines</TableHead>
+                            <TableHead className="text-right pr-6">Lines</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -124,38 +153,91 @@ export default function StockMovementsPage() {
                             </TableRow>
                         ) : (
                             (movements as StockMovement[]).map((m) => (
-                                <TableRow key={m.stockMovementId} className="group hover:bg-muted/30 transition-colors">
-                                    <TableCell className="text-xs text-muted-foreground font-medium">
-                                        {new Date(m.createdAt).toLocaleDateString()}
-                                        <span className="block text-[10px] opacity-70">
-                                            {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
-                                        {getMovementBadge(m.movementTypeCode)}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-semibold text-foreground">{m.requestNo || 'Manual'}</span>
-                                            {m.referenceNo && <span className="text-[10px] text-muted-foreground">Ref: {m.referenceNo}</span>}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2 text-xs">
-                                            <WarehouseIcon className="h-3 w-3 text-muted-foreground" />
-                                            <span className="font-semibold">{m.warehouseId}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2 text-sm">
-                                            <User className="h-3 w-3 text-muted-foreground" />
-                                            <span>{m.performedBy}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-right text-xs font-mono font-bold">
-                                        {m.linesCount}
-                                    </TableCell>
-                                </TableRow>
+                                <React.Fragment key={m.stockMovementId}>
+                                    <TableRow
+                                        className="group hover:bg-muted/30 transition-colors cursor-pointer"
+                                        onClick={() => toggleRow(m.stockMovementId)}
+                                    >
+                                        <TableCell className="text-xs text-muted-foreground font-medium">
+                                            {new Date(m.createdAt).toLocaleDateString()}
+                                            <span className="block text-[10px] opacity-70">
+                                                {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            {getMovementBadge(m.movementTypeCode)}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-semibold text-foreground">{m.requestNo || 'Manual'}</span>
+                                                {m.referenceNo && <span className="text-[10px] text-muted-foreground">Ref: {m.referenceNo}</span>}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <WarehouseIcon className="h-3 w-3 text-muted-foreground" />
+                                                <span className="font-semibold">{m.warehouseId}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <User className="h-3 w-3 text-muted-foreground" />
+                                                <span>{m.performedBy}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <span className="text-xs font-mono font-bold">{m.linesCount}</span>
+                                                {expandedRows.has(m.stockMovementId) ? (
+                                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                                ) : (
+                                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                    {expandedRows.has(m.stockMovementId) && (
+                                        <TableRow className="bg-muted/10 border-t-0">
+                                            <TableCell colSpan={6} className="p-0">
+                                                <div className="px-6 py-4 animate-in slide-in-from-top-2 duration-200">
+                                                    <div className="rounded-md border bg-background/50">
+                                                        <Table>
+                                                            <TableHeader className="bg-muted/50">
+                                                                <TableRow className="h-8">
+                                                                    <TableHead className="text-[10px] uppercase font-bold tracking-widest h-8">Item Description</TableHead>
+                                                                    <TableHead className="text-right text-[10px] uppercase font-bold tracking-widest h-8">OnHand Δ</TableHead>
+                                                                    <TableHead className="text-right text-[10px] uppercase font-bold tracking-widest pr-6 h-8">Reserved Δ</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {m.lines?.map((l, idx) => (
+                                                                    <TableRow key={idx} className="h-10 hover:bg-transparent">
+                                                                        <TableCell className="py-2">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                                <span className="text-xs font-medium">{l.productName}</span>
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right py-2 font-mono text-xs">
+                                                                            <span className={l.qtyDeltaOnHand > 0 ? 'text-emerald-600' : (l.qtyDeltaOnHand < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
+                                                                                {l.qtyDeltaOnHand > 0 ? `+${l.qtyDeltaOnHand}` : l.qtyDeltaOnHand}
+                                                                            </span>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right py-2 pr-6 font-mono text-xs">
+                                                                            <span className={l.qtyDeltaReserved > 0 ? 'text-blue-600' : (l.qtyDeltaReserved < 0 ? 'text-amber-600' : 'text-muted-foreground')}>
+                                                                                {l.qtyDeltaReserved > 0 ? `+${l.qtyDeltaReserved}` : l.qtyDeltaReserved}
+                                                                            </span>
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </React.Fragment>
                             ))
                         )}
                     </TableBody>

@@ -103,3 +103,40 @@ export function useRequestHistory(requestId: number | null) {
         enabled: !!requestId,
     });
 }
+export function useUpdateFulfillmentWarehouse() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ requestId, warehouseId }: { requestId: number, warehouseId: number }) => {
+            const response = await apiClient.put(`/api/inventory/requests/${requestId}/fulfillment/warehouse`, { warehouseId });
+            return response.data;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['requests', variables.requestId] });
+        },
+    });
+}
+
+export function useUpdateRequest() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ requestId, data }: { requestId: number, data: any }) => {
+            const response = await apiClient.put(`/api/inventory/requests/${requestId}`, data);
+            return response.data;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['requests', variables.requestId] });
+        },
+    });
+}
+export function useUpdateFulfillmentQuantities() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ requestId, quantities }: { requestId: number, quantities: { productId: number, quantity: number }[] }) => {
+            const response = await apiClient.put(`/api/inventory/requests/${requestId}/fulfillment/quantities`, { quantities });
+            return response.data;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['requests', variables.requestId] });
+        },
+    });
+}

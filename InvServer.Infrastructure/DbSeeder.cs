@@ -197,6 +197,11 @@ public static class DbSeeder
             );
         }
 
+        if (!await context.InventoryRequestStatuses.AnyAsync(s => s.Code == RequestStatusCodes.Completed))
+        {
+            context.InventoryRequestStatuses.Add(new InventoryRequestStatus { Code = RequestStatusCodes.Completed, Name = "Completed", IsTerminal = true });
+        }
+
         if (!await context.AccessScopeTypes.AnyAsync())
         {
             context.AccessScopeTypes.AddRange(
@@ -211,7 +216,34 @@ public static class DbSeeder
         await context.SaveChangesAsync();
 
         // ==============================================================================
-        // 3a. Inventory Catalog
+        // 3a. Units of Measure
+        // ==============================================================================
+        var uoms = new List<UnitOfMeasure>();
+        if (!await context.UnitsOfMeasure.AnyAsync())
+        {
+            uoms.AddRange(new[]
+            {
+                new UnitOfMeasure { Code = "PCS", Name = "Pieces" },
+                new UnitOfMeasure { Code = "EACH", Name = "Each" },
+                new UnitOfMeasure { Code = "REAM", Name = "Ream" },
+                new UnitOfMeasure { Code = "BOX", Name = "Box" },
+                new UnitOfMeasure { Code = "PACK", Name = "Pack" },
+                new UnitOfMeasure { Code = "BTL", Name = "Bottle" },
+                new UnitOfMeasure { Code = "KG", Name = "Kilogram" },
+                new UnitOfMeasure { Code = "MTR", Name = "Meter" }
+            });
+            context.UnitsOfMeasure.AddRange(uoms);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            uoms = await context.UnitsOfMeasure.ToListAsync();
+        }
+
+        var uomByCode = uoms.ToDictionary(u => u.Code, u => u.UnitOfMeasureId);
+
+        // ==============================================================================
+        // 3b. Inventory Catalog
         // ==============================================================================
         var categories = new List<Category>();
         if (!await context.Categories.AnyAsync())
@@ -239,14 +271,14 @@ public static class DbSeeder
         {
             products.AddRange(new[]
             {
-                new Product { SKU = "PPE-001", Name = "Safety Helmet (Yellow)", CategoryId = categoryByName["PPE & Safety"], UnitOfMeasure = "PCS" },
-                new Product { SKU = "PPE-002", Name = "High-Vis Vest (XL)", CategoryId = categoryByName["PPE & Safety"], UnitOfMeasure = "PCS" },
-                new Product { SKU = "IT-001", Name = "Dell Latitude 5420", CategoryId = categoryByName["Office Equipment"], UnitOfMeasure = "PCS" },
-                new Product { SKU = "IT-002", Name = "Logitech MX Master 3", CategoryId = categoryByName["Office Equipment"], UnitOfMeasure = "PCS" },
-                new Product { SKU = "NET-001", Name = "Cisco Catalyst 9200L", CategoryId = categoryByName["Networking Hardware"], UnitOfMeasure = "PCS" },
-                new Product { SKU = "OFF-001", Name = "A4 Paper Ream (80gsm)", CategoryId = categoryByName["Stationery"], UnitOfMeasure = "REAM" },
-                new Product { SKU = "OFF-002", Name = "Stapler (Heavy Duty)", CategoryId = categoryByName["Stationery"], UnitOfMeasure = "PCS" },
-                new Product { SKU = "CLN-001", Name = "Sanitizer 5L", CategoryId = categoryByName["Cleaning Supplies"], UnitOfMeasure = "BTL" }
+                new Product { SKU = "PPE-001", Name = "Safety Helmet (Yellow)", CategoryId = categoryByName["PPE & Safety"], UnitOfMeasureId = uomByCode["PCS"], ReorderLevel = 10 },
+                new Product { SKU = "PPE-002", Name = "High-Vis Vest (XL)", CategoryId = categoryByName["PPE & Safety"], UnitOfMeasureId = uomByCode["PCS"], ReorderLevel = 10 },
+                new Product { SKU = "IT-001", Name = "Dell Latitude 5420", CategoryId = categoryByName["Office Equipment"], UnitOfMeasureId = uomByCode["PCS"], ReorderLevel = 5 },
+                new Product { SKU = "IT-002", Name = "Logitech MX Master 3", CategoryId = categoryByName["Office Equipment"], UnitOfMeasureId = uomByCode["PCS"], ReorderLevel = 5 },
+                new Product { SKU = "NET-001", Name = "Cisco Catalyst 9200L", CategoryId = categoryByName["Networking Hardware"], UnitOfMeasureId = uomByCode["PCS"], ReorderLevel = 2 },
+                new Product { SKU = "OFF-001", Name = "A4 Paper Ream (80gsm)", CategoryId = categoryByName["Stationery"], UnitOfMeasureId = uomByCode["REAM"], ReorderLevel = 20 },
+                new Product { SKU = "OFF-002", Name = "Stapler (Heavy Duty)", CategoryId = categoryByName["Stationery"], UnitOfMeasureId = uomByCode["PCS"], ReorderLevel = 5 },
+                new Product { SKU = "CLN-001", Name = "Sanitizer 5L", CategoryId = categoryByName["Cleaning Supplies"], UnitOfMeasureId = uomByCode["BTL"], ReorderLevel = 10 }
             });
             context.Products.AddRange(products);
             await context.SaveChangesAsync();
@@ -278,7 +310,7 @@ public static class DbSeeder
             "stock_level.read",
 
             // Inventory Requests
-            "inventory_request.read", "inventory_request.create", "inventory_request.update_draft",
+            "inventory_request.read", "inventory_request.create", "inventory_request.update_draft", "inventory_request.update",
             "inventory_request.delete_draft", "inventory_request.submit", "inventory_request.cancel",
             "inventory_request.comment",
             "inventory_request.review_pass", "inventory_request.review_return", "inventory_request.review_comment",
@@ -447,6 +479,7 @@ public static class DbSeeder
             p.Code.StartsWith("product.") ||
             p.Code.StartsWith("category.") ||
             p.Code == "inventory_request.read" ||
+            p.Code == "inventory_request.update" ||
             p.Code == "workflow_template.read" ||
             p.Code == "workflow_task.read_my" ||
             p.Code == "workflow_task.claim" ||

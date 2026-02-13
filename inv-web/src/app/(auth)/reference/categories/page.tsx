@@ -2,6 +2,7 @@
 
 import { useCategories } from '@/hooks/useInventory';
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import {
     Plus,
     ExternalLink,
@@ -24,8 +25,10 @@ export default function CategoriesPage() {
                     <h1 className="text-2xl font-bold tracking-tight text-foreground">Categories</h1>
                     <p className="text-sm text-muted-foreground">Manage product classification and groupings.</p>
                 </div>
-                <Button size="sm">
-                    <Plus className="mr-2 h-4 w-4" /> Add Category
+                <Button size="sm" asChild>
+                    <Link href="/reference/categories/add">
+                        <Plus className="mr-2 h-4 w-4" /> Add Category
+                    </Link>
                 </Button>
             </div>
 

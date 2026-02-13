@@ -3,6 +3,23 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace InvServer.Core.Entities;
 
+[Table("UNIT_OF_MEASURE")]
+public class UnitOfMeasure
+{
+    [Key]
+    public long UnitOfMeasureId { get; set; }
+
+    [Required]
+    [MaxLength(50)]
+    public string Code { get; set; } = string.Empty;
+
+    [Required]
+    [MaxLength(200)]
+    public string Name { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; } = true;
+}
+
 [Table("CATEGORY")]
 public class Category
 {
@@ -40,9 +57,11 @@ public class Product
     [ForeignKey(nameof(CategoryId))]
     public Category? Category { get; set; }
 
-    [Required]
-    [MaxLength(50)]
-    public string UnitOfMeasure { get; set; } = "EACH";
+    public long UnitOfMeasureId { get; set; }
+    [ForeignKey(nameof(UnitOfMeasureId))]
+    public UnitOfMeasure UnitOfMeasure { get; set; } = null!;
+
+    public decimal ReorderLevel { get; set; } = 0;
 
     public bool IsActive { get; set; } = true;
 }

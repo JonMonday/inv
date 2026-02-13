@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useStockLevels, useWarehouses } from '@/hooks/useInventory';
+import { Button } from '@/components/ui/button';
 import {
     Table,
     TableBody,
@@ -10,9 +12,17 @@ import {
     TableRow
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Box, Search, Warehouse as WarehouseIcon } from 'lucide-react';
+import { Box, Search, Warehouse as WarehouseIcon, Plus, ChevronDown, FolderPlus, LayoutGrid } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState } from 'react';
@@ -27,6 +37,7 @@ interface StockLevel {
     onHandQty: number;
     reservedQty: number;
     availableQty: number;
+    productReorderLevel: number;
     updatedAt: string;
 }
 
@@ -54,6 +65,40 @@ export default function StockLevelsPage() {
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Stock Levels</h1>
                     <p className="text-sm text-muted-foreground">Real-time inventory levels across all warehouses</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="gap-2">
+                                <Plus className="h-4 w-4" /> Add New <ChevronDown className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel>Catalog Management</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                                <Link href="/reference/categories/add" className="flex items-center gap-2 cursor-pointer">
+                                    <FolderPlus className="h-4 w-4 text-muted-foreground" /> Add Category
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href="/reference/products/add" className="flex items-center gap-2 cursor-pointer">
+                                    <Box className="h-4 w-4 text-muted-foreground" /> Add Product
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href="/reference/warehouses/add" className="flex items-center gap-2 cursor-pointer">
+                                    <LayoutGrid className="h-4 w-4 text-muted-foreground" /> Add Warehouse
+                                </Link>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <Link href="/inventory/levels/movement">
+                        <Button className="gap-2">
+                            <Plus className="h-4 w-4" /> New Manual Movement
+                        </Button>
+                    </Link>
                 </div>
             </div>
 
@@ -143,8 +188,14 @@ export default function StockLevelsPage() {
                                     <TableCell className="text-right font-mono">{item.onHandQty.toLocaleString()}</TableCell>
                                     <TableCell className="text-right text-muted-foreground font-mono">{item.reservedQty.toLocaleString()}</TableCell>
                                     <TableCell className="text-right font-bold font-mono">
-                                        <Badge variant={item.availableQty > 10 ? 'secondary' : 'destructive'} className="font-mono">
+                                        <Badge
+                                            variant={item.availableQty <= item.productReorderLevel ? 'destructive' : 'secondary'}
+                                            className="font-mono"
+                                        >
                                             {item.availableQty.toLocaleString()}
+                                            {item.availableQty <= item.productReorderLevel && (
+                                                <span className="ml-1 text-[8px] uppercase tracking-tighter opacity-80">Low</span>
+                                            )}
                                         </Badge>
                                     </TableCell>
                                 </TableRow>

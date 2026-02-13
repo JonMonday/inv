@@ -81,7 +81,13 @@ public class StockController : ControllerBase
                 m.WarehouseId,
                 PerformedBy = m.CreatedByUser.Username,
                 m.CreatedAt,
-                LinesCount = m.Lines.Count
+                LinesCount = m.Lines.Count,
+                Lines = m.Lines.Select(l => new {
+                    l.ProductId,
+                    ProductName = l.Product.Name,
+                    l.QtyDeltaOnHand,
+                    l.QtyDeltaReserved
+                }).ToList()
             });
 
         if (!string.IsNullOrEmpty(request.SearchTerm))

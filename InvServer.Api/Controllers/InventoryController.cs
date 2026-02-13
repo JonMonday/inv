@@ -68,13 +68,15 @@ public class InventoryController : ControllerBase
                 StatusCode = r.Status.Code,
                 StatusLabel = r.Status.Name,
                 RequestedAt = r.RequestedAt,
-                CurrentAssignee = r.WorkflowInstance != null 
-                    ? r.WorkflowInstance.Tasks
-                        .Where(t => t.WorkflowTaskStatus.Code == "PENDING" || t.WorkflowTaskStatus.Code == "AVAILABLE" || t.WorkflowTaskStatus.Code == "CLAIMED")
-                        .SelectMany(t => t.Assignees)
-                        .Select(a => a.User.DisplayName)
-                        .FirstOrDefault() ?? ""
-                    : ""
+                CurrentAssignee = r.Status.Code == RequestStatusCodes.Completed 
+                    ? r.RequestedByUser.DisplayName 
+                    : (r.WorkflowInstance != null 
+                        ? r.WorkflowInstance.Tasks
+                            .Where(t => t.WorkflowTaskStatus.Code == "PENDING" || t.WorkflowTaskStatus.Code == "AVAILABLE" || t.WorkflowTaskStatus.Code == "CLAIMED")
+                            .SelectMany(t => t.Assignees)
+                            .Select(a => a.User.DisplayName)
+                            .FirstOrDefault() ?? ""
+                        : "")
             })
             .ToPagedResponseAsync(request);
 
@@ -146,6 +148,8 @@ public class InventoryController : ControllerBase
             .Include(r => r.Status)
             .Include(r => r.Warehouse)
             .Include(r => r.Department)
+            .Include(r => r.RequestedByUser)
+            .Include(r => r.WorkflowTemplate)
             .Include(r => r.WorkflowInstance)
             .ThenInclude(i => i.CurrentStep)
             .ThenInclude(s => s.StepType)
@@ -304,7 +308,10 @@ public class InventoryController : ControllerBase
         var history = request.WorkflowTemplate.Steps
             .OrderBy(s => s.SequenceNo)
             .Select(s => {
-                var task = tasks.FirstOrDefault(t => t.WorkflowStepId == s.WorkflowStepId);
+                // Important: Order by CreatedAt descending to pick the LATEST task state for this step
+                var task = tasks.Where(t => t.WorkflowStepId == s.WorkflowStepId)
+                                .OrderByDescending(t => t.CreatedAt)
+                                .FirstOrDefault();
                 
                 // Determine step status
                 string status = "PENDING";
@@ -314,7 +321,15 @@ public class InventoryController : ControllerBase
                 }
                 else if (request.WorkflowInstance.CompletedAt != null)
                 {
-                    status = "SKIPPED";
+                    // If workflow is complete, the END step (or final step) is also effectively complete.
+                    if (s.StepKey == "END" || s.StepType.Code == "END")
+                    {
+                        status = "COMPLETED";
+                    }
+                    else
+                    {
+                        status = "SKIPPED";
+                    }
                 }
                 else if (request.WorkflowInstance.CurrentWorkflowStepId == s.WorkflowStepId)
                 {
@@ -384,6 +399,7 @@ public class InventoryController : ControllerBase
         var rawTasks = tasks.OrderBy(t => t.CreatedAt).Select(t => new
         {
             t.WorkflowTaskId,
+            StepKey = t.WorkflowStep?.StepKey,
             StepName = t.WorkflowStep?.Name,
             Status = t.WorkflowTaskStatus?.Name,
             StatusCode = t.WorkflowTaskStatus?.Code,
@@ -410,6 +426,8 @@ public class InventoryController : ControllerBase
 
         return Ok(new ApiResponse<object> { 
             Data = new { 
+                Requester = new { userId = request.RequestedByUserId, displayName = request.RequestedByUser?.DisplayName },
+                WorkflowTemplate = new { id = request.WorkflowTemplateId, name = request.WorkflowTemplate?.Name },
                 History = history, 
                 Transitions = transitions, 
                 Tasks = rawTasks,
@@ -640,6 +658,88 @@ public class InventoryController : ControllerBase
         return Ok(new ApiResponse<long> { Data = movementId });
     }
 
+    [HttpPut("requests/{requestId}/fulfillment/warehouse")]
+    [RequirePermission("inventory_request.update")]
+    public async Task<ActionResult<ApiResponse<string>>> UpdateFulfillmentWarehouse(long requestId, [FromBody] UpdateFulfillmentWarehouseRequest dto)
+    {
+        var request = await _db.InventoryRequests
+            .Include(r => r.WorkflowInstance)
+            .ThenInclude(i => i.CurrentStep)
+            .ThenInclude(s => s.StepType)
+            .FirstOrDefaultAsync(r => r.RequestId == requestId);
+
+        if (request == null) return NotFound();
+
+        // Enforce Workflow Step Type check
+        if (request.WorkflowInstance?.CurrentStep?.StepType?.Code != WorkflowStepTypeCodes.Fulfillment)
+            return BadRequest(new ApiErrorResponse { Message = "Request is not in a fulfillment step." });
+
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!long.TryParse(userIdStr, out var userId)) return Unauthorized();
+
+        // Check if user is a candidate for any active task on this step
+        var isAssignee = await _db.WorkflowTaskAssignees
+            .AnyAsync(a => a.UserId == userId && a.WorkflowTask.WorkflowInstanceId == request.WorkflowInstanceId && a.WorkflowTask.WorkflowTaskStatus.Code != WorkflowTaskStatusCodes.Completed);
+        
+        var isClaimant = await _db.WorkflowTasks
+            .AnyAsync(t => t.ClaimedByUserId == userId && t.WorkflowInstanceId == request.WorkflowInstanceId && t.WorkflowTaskStatus.Code != WorkflowTaskStatusCodes.Completed);
+
+        if (!isAssignee && !isClaimant)
+            return Forbid();
+
+        var oldWarehouseId = request.WarehouseId;
+        request.WarehouseId = dto.WarehouseId;
+        
+        await _db.SaveChangesAsync();
+        await _auditService.LogChangeAsync(userId, "UPDATE_FULFILLMENT_WAREHOUSE", new { id = requestId, warehouseId = oldWarehouseId }, new { id = requestId, warehouseId = dto.WarehouseId });
+
+        return Ok(new ApiResponse<string> { Data = "Warehouse updated successfully." });
+    }
+
+    [HttpPut("requests/{requestId}/fulfillment/quantities")]
+    [RequirePermission("inventory_request.update")]
+    public async Task<ActionResult<ApiResponse<string>>> UpdateFulfillmentQuantities(long requestId, [FromBody] UpdateFulfillmentQuantitiesRequest dto)
+    {
+        var request = await _db.InventoryRequests
+            .Include(r => r.Lines)
+            .Include(r => r.WorkflowInstance)
+                .ThenInclude(i => i.CurrentStep)
+                    .ThenInclude(s => s.StepType)
+            .FirstOrDefaultAsync(r => r.RequestId == requestId);
+
+        if (request == null) return NotFound();
+
+        if (request.WorkflowInstance?.CurrentStep?.StepType?.Code != WorkflowStepTypeCodes.Fulfillment)
+            return BadRequest(new ApiErrorResponse { Message = "Request is not in a fulfillment step." });
+
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!long.TryParse(userIdStr, out var userId)) return Unauthorized();
+
+        // Check if user is a candidate for any active task on this step
+        var isAssignee = await _db.WorkflowTaskAssignees
+            .AnyAsync(a => a.UserId == userId && a.WorkflowTask.WorkflowInstanceId == request.WorkflowInstanceId && a.WorkflowTask.WorkflowTaskStatus.Code != WorkflowTaskStatusCodes.Completed);
+        
+        var isClaimant = await _db.WorkflowTasks
+            .AnyAsync(t => t.ClaimedByUserId == userId && t.WorkflowInstanceId == request.WorkflowInstanceId && t.WorkflowTaskStatus.Code != WorkflowTaskStatusCodes.Completed);
+
+        if (!isAssignee && !isClaimant)
+            return Forbid();
+
+        foreach (var q in dto.Quantities)
+        {
+            var line = request.Lines.FirstOrDefault(l => l.ProductId == q.ProductId);
+            if (line != null)
+            {
+                line.QtyApproved = q.Quantity;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        await _auditService.LogChangeAsync(userId, "UPDATE_FULFILLMENT_QUANTITIES", new { id = requestId }, new { id = requestId, quantities = dto.Quantities });
+
+        return Ok(new ApiResponse<string> { Data = "Quantities updated successfully." });
+    }
+
     private async Task<long> GetStatusIdAsync(string table, string code)
     {
         var status = await _db.InventoryRequestStatuses.FirstOrDefaultAsync(s => s.Code == code);
@@ -647,6 +747,10 @@ public class InventoryController : ControllerBase
         return status.RequestStatusId;
     }
 }
+
+public record UpdateFulfillmentWarehouseRequest(long WarehouseId);
+public record UpdateFulfillmentQuantitiesRequest(List<FulfillmentQuantityDto> Quantities);
+public record FulfillmentQuantityDto(long ProductId, decimal Quantity);
 
 public record InventoryRequestDto(
     long RequestTypeId,

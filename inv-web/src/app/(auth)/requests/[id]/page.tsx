@@ -3,7 +3,8 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useTasks } from '@/hooks/useTasks';
-import { useRequest, useRequestHistory } from '@/hooks/useRequests';
+import { useRequest, useRequestHistory, useUpdateFulfillmentWarehouse, useUpdateFulfillmentQuantities } from '@/hooks/useRequests';
+import { useWarehouses, useStockLevels } from '@/hooks/useInventory';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -19,7 +20,10 @@ import {
     UserCheck,
     ShieldCheck,
     Workflow,
-    Package
+    Package,
+    User,
+    GitBranch,
+    Save
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,7 +44,9 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { WorkflowDiagram } from '@/components/requests/WorkflowDiagram';
+import { TaskActionBar } from '@/components/workflow/TaskActionBar';
 
 export default function RequestDetailPage() {
     const { id } = useParams();
@@ -55,11 +61,87 @@ export default function RequestDetailPage() {
     const rawTasks = historyData?.tasks || [];
     const manualAssignments = historyData?.manualAssignments || [];
 
+    const updateWH = useUpdateFulfillmentWarehouse();
+    const updateQuantities = useUpdateFulfillmentQuantities();
+    const warehousesQuery = useWarehouses();
+    const { toast } = useToast();
+
+    const [approvedQuantities, setApprovedQuantities] = useState<Record<number, number>>({});
+
+    const stockQuery = useStockLevels(request?.warehouseId);
+    const warehouseStock = stockQuery.data || [];
+
+    useEffect(() => {
+        if (request?.lines) {
+            const initialQs: Record<number, number> = {};
+            request.lines.forEach((l: any) => {
+                initialQs[l.productId] = l.qtyApproved ?? l.qtyRequested;
+            });
+            setApprovedQuantities(initialQs);
+        }
+    }, [request?.lines]);
+
+    const handleQuantityChange = (productId: number, val: string) => {
+        const num = parseFloat(val);
+        if (!isNaN(num)) {
+            setApprovedQuantities(prev => ({ ...prev, [productId]: num }));
+        }
+    };
+
+    const onSaveQuantities = () => {
+        const payload = Object.entries(approvedQuantities).map(([productId, quantity]) => ({
+            productId: Number(productId),
+            quantity
+        }));
+        updateQuantities.mutate({ requestId: Number(id), quantities: payload }, {
+            onSuccess: () => {
+                toast({
+                    title: "Success",
+                    description: "Fulfillment quantities updated successfully.",
+                });
+            }
+        });
+    };
+
+    const hasQuantityChanges = () => {
+        if (!request?.lines) return false;
+        return request.lines.some((l: any) =>
+            approvedQuantities[l.productId] !== (l.qtyApproved ?? l.qtyRequested)
+        );
+    };
+
     // Find active task for this request assigned to me
     const myActiveTask = tasksQuery.data?.data?.find((t: any) =>
         t.requestId === Number(id) &&
         (t.status === 'PENDING' || t.status === 'CLAIMED')
     );
+
+    const isFulfillmentStep = myActiveTask?.stepKey === 'FULFILL' ||
+        myActiveTask?.stepKey === 'FULFILLMENT' ||
+        myActiveTask?.stepName === 'Fulfillment';
+
+    const canAction = !!myActiveTask;
+
+    // Default Warehouse Selection logic
+    useEffect(() => {
+        const whs = warehousesQuery.data?.data;
+        if (isFulfillmentStep && canAction && !request?.warehouseId && whs && whs.length > 0) {
+            const firstWH = whs[0] as any;
+            updateWH.mutate({ requestId: Number(id), warehouseId: firstWH.warehouseId });
+        }
+    }, [isFulfillmentStep, canAction, request?.warehouseId, warehousesQuery.data]);
+
+    // Calculate rejection counts per step
+    const getRejectionCount = (stepKey: string) => {
+        if (!rawTasks) return 0;
+        return rawTasks.filter((t: any) =>
+            t.stepKey === stepKey &&
+            t.actions?.some((a: any) =>
+                a.actionType?.toLowerCase().includes('reject') ||
+                a.actionType?.toLowerCase().includes('dispute')
+            )
+        ).length;
+    };
 
     if (isLoading) return (
         <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -113,15 +195,6 @@ export default function RequestDetailPage() {
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 <div className="lg:col-span-3 space-y-6">
 
-                    {/* Inline Action Panel */}
-                    {myActiveTask && (
-                        <TaskActionPanel
-                            task={myActiveTask}
-                            request={request}
-                            isStorekeeper={!!user?.roles.includes('STOREKEEPER')}
-                        />
-                    )}
-
                     <Card>
                         <CardHeader className="border-b py-4">
                             <CardTitle className="text-sm font-bold uppercase tracking-tight">Request Details</CardTitle>
@@ -136,9 +209,55 @@ export default function RequestDetailPage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Warehouse</label>
+                                {isFulfillmentStep && canAction ? (
+                                    <Select
+                                        disabled={updateWH.isPending}
+                                        value={String(request.warehouseId)}
+                                        onValueChange={(val) => updateWH.mutate({ requestId: Number(id), warehouseId: Number(val) })}
+                                    >
+                                        <SelectTrigger className="h-10 bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors">
+                                            <div className="flex items-center font-medium text-sm">
+                                                {updateWH.isPending ? (
+                                                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-primary" />
+                                                ) : (
+                                                    <Warehouse className="mr-2 h-3.5 w-3.5 text-primary" />
+                                                )}
+                                                <SelectValue />
+                                            </div>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {warehousesQuery.data?.data?.map((wh: any, idx: number) => (
+                                                <SelectItem key={wh.warehouseId || idx} value={String(wh.warehouseId)}>
+                                                    {wh.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <div className="h-10 px-3 flex items-center bg-muted/10 border rounded-md font-medium text-sm">
+                                        <Warehouse className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                        {request.warehouse?.name || `WH-${request.warehouseId}`}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Requested By</label>
                                 <div className="h-10 px-3 flex items-center bg-muted/10 border rounded-md font-medium text-sm">
-                                    <Warehouse className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                                    {request.warehouse?.name || `WH-${request.warehouseId}`}
+                                    <User className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                    {request.requestedByUser?.displayName || request.requestedByUser?.email || 'Unknown'}
+                                    {/* <span className="ml-2 text-[10px] text-muted-foreground font-mono">#{request.requestedByUserId}</span> */}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Workflow Type</label>
+                                <div className="h-10 px-3 flex items-center bg-muted/10 border rounded-md font-medium text-sm">
+                                    <GitBranch className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                    {request.workflowTemplate?.name || 'Standard Workflow'}
+                                    {/* {request.workflowTemplateId && (
+                                        <span className="ml-2 text-[10px] text-muted-foreground font-mono">#{request.workflowTemplateId}</span>
+                                    )} */}
                                 </div>
                             </div>
 
@@ -161,6 +280,7 @@ export default function RequestDetailPage() {
                                             <TableRow>
                                                 <TableHead className="w-12 text-center text-[10px] font-bold uppercase tracking-widest">#</TableHead>
                                                 <TableHead className="text-[10px] font-bold uppercase tracking-widest">Description</TableHead>
+                                                <TableHead className="text-center text-[10px] font-bold uppercase tracking-widest w-20">Stock</TableHead>
                                                 <TableHead className="text-center text-[10px] font-bold uppercase tracking-widest w-24">Req</TableHead>
                                                 <TableHead className="text-center text-[10px] font-bold uppercase tracking-widest w-24">Appr</TableHead>
                                                 <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest w-24 pr-6">Fulfilled</TableHead>
@@ -168,7 +288,7 @@ export default function RequestDetailPage() {
                                         </TableHeader>
                                         <TableBody className="divide-y">
                                             {request.lines.map((line: any, index: number) => (
-                                                <TableRow key={line.requestLineId} className="hover:bg-accent/5 transition-colors h-14">
+                                                <TableRow key={line.requestLineId || index} className="hover:bg-accent/5 transition-colors h-14">
                                                     <td className="p-3 text-center text-xs text-muted-foreground font-mono">{index + 1}</td>
                                                     <TableCell>
                                                         <div className="flex flex-col">
@@ -176,13 +296,42 @@ export default function RequestDetailPage() {
                                                             <span className="text-[10px] text-muted-foreground font-mono uppercase">{line.product?.sku || `SKU-${line.productId}`}</span>
                                                         </div>
                                                     </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge variant="outline" className="font-mono text-[10px]">
+                                                            {warehouseStock.find((s: any) => s.productId === line.productId)?.availableQty ?? 0}
+                                                        </Badge>
+                                                    </TableCell>
                                                     <TableCell className="text-center font-mono font-bold text-sm bg-muted/5">{line.qtyRequested}</TableCell>
-                                                    <TableCell className="text-center font-mono text-sm text-muted-foreground">{line.qtyApproved || '-'}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        {isFulfillmentStep && canAction ? (
+                                                            <Input
+                                                                type="number"
+                                                                className="h-8 w-20 mx-auto text-center font-mono text-sm border-primary/20 bg-primary/5 focus-visible:ring-primary"
+                                                                value={approvedQuantities[line.productId] ?? line.qtyRequested}
+                                                                onChange={(e) => handleQuantityChange(line.productId, e.target.value)}
+                                                            />
+                                                        ) : (
+                                                            <span className="font-mono text-sm text-muted-foreground">{line.qtyApproved || '-'}</span>
+                                                        )}
+                                                    </TableCell>
                                                     <TableCell className="text-right pr-6 font-mono font-bold text-sm text-primary">{line.qtyFulfilled || 0}</TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>
                                     </Table>
+                                    {isFulfillmentStep && canAction && hasQuantityChanges() && (
+                                        <div className="p-2 border-t bg-primary/5 flex justify-end">
+                                            <Button
+                                                size="sm"
+                                                className="h-8 gap-2 bg-primary hover:bg-primary/90"
+                                                onClick={onSaveQuantities}
+                                                disabled={updateQuantities.isPending}
+                                            >
+                                                {updateQuantities.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                                Save Approved Quantities
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center justify-between border-b pb-2">
@@ -226,8 +375,8 @@ export default function RequestDetailPage() {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y">
-                                                    {rawTasks.length > 0 ? rawTasks.map((t: any) => (
-                                                        <tr key={t.workflowTaskId} className="hover:bg-accent/5 transition-colors">
+                                                    {rawTasks.length > 0 ? rawTasks.map((t: any, idx: number) => (
+                                                        <tr key={t.workflowTaskId || idx} className="hover:bg-accent/5 transition-colors">
                                                             <td className="p-2 font-bold">{t.stepName}</td>
                                                             <td className="p-2 text-center">
                                                                 <Badge variant={t.statusCode === 'COMPLETED' ? 'default' : 'outline'} className="text-[8px] h-4 px-1">
@@ -258,6 +407,14 @@ export default function RequestDetailPage() {
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Action Bar Below Details */}
+                    {myActiveTask && (
+                        <TaskActionBar
+                            task={myActiveTask}
+                            request={request}
+                        />
+                    )}
                 </div>
 
                 {/* Workflow Tracker Sidebar */}
@@ -283,9 +440,11 @@ export default function RequestDetailPage() {
                                     .filter((ma: any) => ma.workflowStepId === step.workflowStepId)
                                     .map((ma: any) => ma.userDisplayName);
 
+                                const rejectionCount = getRejectionCount(step.stepKey);
+
                                 return (
                                     <div
-                                        key={step.workflowStepId}
+                                        key={step.workflowStepId || idx}
                                         className={`p-4 rounded-lg border transition-all duration-300 ${isActive ? 'bg-primary/5 border-primary shadow-sm' : 'bg-muted/10 border-border/50'}`}
                                     >
                                         <div className="flex items-center justify-between mb-2">
@@ -293,7 +452,14 @@ export default function RequestDetailPage() {
                                                 <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isDone ? 'bg-primary text-primary-foreground' : (isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground')}`}>
                                                     {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : idx + 1}
                                                 </div>
-                                                <p className={`text-xs font-bold uppercase tracking-tight ${isActive ? 'text-primary' : 'text-foreground'}`}>{step.stepName}</p>
+                                                <div className="flex flex-col">
+                                                    <p className={`text-xs font-bold uppercase tracking-tight ${isActive ? 'text-primary' : 'text-foreground'}`}>{step.stepName}</p>
+                                                    {rejectionCount > 0 && (
+                                                        <span className="text-[9px] font-bold text-destructive uppercase tracking-tighter">
+                                                            Rejected {rejectionCount} {rejectionCount === 1 ? 'time' : 'times'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <Badge variant={isDone ? 'default' : (isActive ? 'secondary' : 'outline')} className="text-[8px] uppercase font-bold tracking-widest px-1.5 py-0">
                                                 {isDone ? 'Completed' : (isActive ? 'Current' : 'Planned')}
@@ -356,190 +522,7 @@ export default function RequestDetailPage() {
     );
 }
 
-function TaskActionPanel({ task, request, isStorekeeper }: { task: any, request: any, isStorekeeper: boolean }) {
-    const { actionMutation, claimMutation } = useTasks();
-    const { toast } = useToast();
-    const [notes, setNotes] = useState('');
-    const [selectedWarehouses, setSelectedWarehouses] = useState<Record<number, number>>({});
 
-    // Auto-preselect warehouse if only one option exists or if item already fulfilled
-    useEffect(() => {
-        if (request?.lines) {
-            const preselection: Record<number, number> = {};
-            request.lines.forEach((line: any) => {
-                if (line.stock && line.stock.length === 1) {
-                    preselection[line.productId] = line.stock[0].warehouseId;
-                }
-            });
-            setSelectedWarehouses(prev => ({ ...prev, ...preselection }));
-        }
-    }, [request]);
-
-    const isFulfillmentStep = task.stepKey === 'FULFILL' || task.stepKey === 'FULFILLMENT' || task.stepName === 'Fulfillment';
-    const isStartStep = task.stepKey === 'START' || task.stepKey === 'SUBMISSION';
-    const isClaimedByMe = task.claimedByUserId && task.claimedByUserId !== 0; // Simplified check since we only render this if it's "my task"
-
-    // We assume if we have the task, it's either claimed by us or we are an assignee.
-    // Ideally we should claim it first if it's just 'assigned' but not 'claimed'.
-    // But for this simplified view, let's assume if it shows up in "My Tasks", I can act on it.
-    // If we want to enforce explicit claim:
-    const needsClaim = !task.claimedByUserId;
-
-    const handleClaim = async () => {
-        try {
-            await claimMutation.mutateAsync(task.id);
-            toast({ title: 'Task claimed successfully' });
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Failed to claim task' });
-        }
-    };
-
-    const handleAction = async (action: 'APPROVE' | 'REJECT' | 'CANCEL' | 'SUBMIT') => {
-        try {
-            let actualAction: string = action;
-            if (task.stepKey === 'START' && action === 'APPROVE') {
-                actualAction = 'SUBMIT';
-            } else if (isFulfillmentStep && action === 'APPROVE') {
-                actualAction = 'COMPLETE';
-            }
-
-            const payload: any = {};
-            if (isFulfillmentStep && action === 'APPROVE') {
-                payload.fulfillments = Object.entries(selectedWarehouses).map(([productId, warehouseId]) => ({
-                    productId: Number(productId),
-                    warehouseId
-                }));
-            }
-
-            await actionMutation.mutateAsync({
-                taskId: task.id,
-                action: actualAction as any,
-                notes,
-                payloadJson: JSON.stringify(payload)
-            });
-            toast({ title: `Task ${actualAction.toLowerCase()}d successfully` });
-        } catch (error: any) {
-            toast({
-                variant: 'destructive',
-                title: `Failed to ${action.toLowerCase()} task`,
-                description: error.message || 'Unknown error'
-            });
-        }
-    };
-
-    if (needsClaim) {
-        return (
-            <Card className="border-primary/50 bg-primary/5 mb-6">
-                <CardHeader className="py-4">
-                    <CardTitle className="text-sm font-bold uppercase tracking-tight flex items-center gap-2 text-primary">
-                        <CheckCircle2 className="h-4 w-4" /> Action Required: {task.stepName}
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                    <p className="text-sm text-muted-foreground">You are a candidate for this task. Claim it to start working.</p>
-                    <Button onClick={handleClaim} disabled={claimMutation.isPending} className="w-fit">
-                        {claimMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                        Claim Task
-                    </Button>
-                </CardContent>
-            </Card>
-        );
-    }
-
-    return (
-        <Card className="border-primary shadow-md bg-white mb-6 animate-in slide-in-from-top-2">
-            <CardHeader className="border-b bg-primary/5 py-4">
-                <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-bold uppercase tracking-tight flex items-center gap-2 text-primary">
-                        <CheckCircle2 className="h-4 w-4" /> Current Task: {task.stepName}
-                    </CardTitle>
-                    <Badge variant="outline" className="text-[10px] bg-background">Assigned to You</Badge>
-                </div>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-                {isFulfillmentStep && (
-                    <div className="space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                            <Package className="h-3.5 w-3.5" />
-                            Fulfillment: Select Source Warehouses
-                        </h3>
-                        <div className="rounded-md border overflow-hidden">
-                            <Table>
-                                <TableHeader className="bg-muted/50">
-                                    <TableRow>
-                                        <TableHead className="h-8 text-[10px] font-bold uppercase tracking-widest">Item</TableHead>
-                                        <TableHead className="h-8 text-center text-[10px] font-bold uppercase tracking-widest w-20">Qty</TableHead>
-                                        <TableHead className="h-8 text-[10px] font-bold uppercase tracking-widest">Source Warehouse</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {request.lines?.map((line: any) => (
-                                        <TableRow key={line.productId}>
-                                            <TableCell className="py-2 text-xs font-bold">{line.product?.name}</TableCell>
-                                            <TableCell className="py-2 text-center text-xs font-mono">{line.qtyRequested}</TableCell>
-                                            <TableCell className="py-2">
-                                                <Select
-                                                    value={selectedWarehouses[line.productId] ? String(selectedWarehouses[line.productId]) : ""}
-                                                    onValueChange={(val) => setSelectedWarehouses(prev => ({ ...prev, [line.productId]: Number(val) }))}
-                                                >
-                                                    <SelectTrigger className={cn("h-8 text-xs", !selectedWarehouses[line.productId] && "border-destructive/50")}>
-                                                        <SelectValue placeholder="Select Source..." />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {line.stock?.map((s: any) => (
-                                                            <SelectItem key={s.warehouseId} value={String(s.warehouseId)}>
-                                                                <span className="flex items-center gap-2">
-                                                                    <span>{s.warehouseName}</span>
-                                                                    <Badge variant="secondary" className="text-[9px] h-4 px-1">{s.availableQty} Avail</Badge>
-                                                                </span>
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
-                )}
-
-                <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Notes / Remarks</label>
-                    <Textarea
-                        placeholder="Add any comments regarding your action..."
-                        className="resize-none text-sm"
-                        rows={3}
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                    />
-                </div>
-
-                <div className="flex items-center gap-3 pt-2">
-                    <Button
-                        onClick={() => handleAction('APPROVE')}
-                        className="flex-1"
-                        disabled={actionMutation.isPending || (isFulfillmentStep && request.lines?.some((l: any) => !selectedWarehouses[l.productId]))}
-                    >
-                        {actionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                        {isFulfillmentStep ? "Complete Fulfillment" : (isStartStep ? "Submit Request" : "Approve")}
-                    </Button>
-
-                    {!isStartStep && (
-                        <Button
-                            variant="destructive"
-                            onClick={() => handleAction('REJECT')}
-                            disabled={actionMutation.isPending}
-                        >
-                            Reject
-                        </Button>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
 
 
 

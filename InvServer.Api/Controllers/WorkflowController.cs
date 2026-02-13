@@ -616,44 +616,47 @@ public class WorkflowController : ControllerBase
         var isConfirmationStep = stepKey == "CONFIRM" || stepKey == "CONFIRMATION";
         var isApprovalOrCompletion = request.ActionCode == WorkflowActionCodes.Approve || request.ActionCode == WorkflowActionCodes.Complete;
 
-        if (!string.IsNullOrEmpty(request.PayloadJson) && isFulfillmentStep)
+        if (isFulfillmentStep && isApprovalOrCompletion && requestId.HasValue)
         {
             try
             {
-                var payload = System.Text.Json.JsonSerializer.Deserialize<FulfillmentPayload>(
-                    request.PayloadJson,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                // Fetch the request to get the up-to-date WarehouseId and Lines
+                var inventoryRequest = await _db.InventoryRequests
+                    .Include(r => r.Lines)
+                    .FirstOrDefaultAsync(r => r.RequestId == requestId.Value);
 
-                if (payload?.Fulfillments != null && payload.Fulfillments.Any() &&
-                    requestId.HasValue && isApprovalOrCompletion)
+                if (inventoryRequest != null && inventoryRequest.Lines.Any())
                 {
-                    foreach (var fulfillment in payload.Fulfillments)
+                    // Group by product to handle any potential (though unlikely) duplicates in lines
+                    var lineGroups = inventoryRequest.Lines.GroupBy(l => l.ProductId);
+                    
+                    foreach (var group in lineGroups)
                     {
                         var movementReq = new StockMovementRequest
                         {
-                            WarehouseId = fulfillment.WarehouseId,
+                            WarehouseId = inventoryRequest.WarehouseId, // Use the warehouse from the request (storekeeper updated this)
                             MovementTypeCode = MovementTypeCodes.Reserve,
                             RequestId = requestId.Value,
                             UserId = userId,
-                            Notes = "Fulfillment automated reservation",
+                            Notes = "Fulfillment automated reservation (backend-driven)",
                             Lines = new List<StockMovementLineRequest>
                             {
                                 new StockMovementLineRequest
                                 {
-                                    ProductId = fulfillment.ProductId,
-                                    QtyDeltaReserved = GetRequestedQty(requestId.Value, fulfillment.ProductId)
+                                    ProductId = group.Key,
+                                    QtyDeltaReserved = group.Sum(l => l.QtyApproved ?? l.QtyRequested)
                                 }
                             }
                         };
 
-                        var idemKey = !string.IsNullOrEmpty(idem) ? $"{idem}:fulfill:{id}:{fulfillment.ProductId}" : $"fulfill:{id}:{fulfillment.ProductId}";
+                        var idemKey = !string.IsNullOrEmpty(idem) ? $"{idem}:fulfill:{id}:{group.Key}" : $"fulfill:{id}:{group.Key}";
                         await _stockService.PostMovementAsync(movementReq, HttpContext.TraceIdentifier, $"workflow:task:{id}", idemKey);
                     }
                 }
             }
             catch (Exception ex)
             {
-                return BadRequest(new ApiErrorResponse { Message = $"Fulfillment payload processing failed: {ex.Message}" });
+                return BadRequest(new ApiErrorResponse { Message = $"Fulfillment processing failed: {ex.Message}" });
             }
         }
 
@@ -701,6 +704,34 @@ public class WorkflowController : ControllerBase
         try
         {
             await _workflowEngine.ProcessActionAsync(id, request.ActionCode, userId, request.Notes, request.PayloadJson, idem, request.NextAssigneeUserId);
+
+            // Check if instance just completed
+            var instance = await _db.WorkflowInstances
+                .AsNoTracking()
+                .Include(i => i.WorkflowInstanceStatus)
+                .FirstOrDefaultAsync(i => i.WorkflowInstanceId == task.WorkflowInstanceId);
+
+            if (instance != null && instance.WorkflowInstanceStatus.Code == WorkflowInstanceStatusCodes.Completed)
+            {
+                if (requestId.HasValue)
+                {
+                    var reqEntity = await _db.InventoryRequests.FirstOrDefaultAsync(r => r.RequestId == requestId.Value);
+                    if (reqEntity != null)
+                    {
+                        var completedStatusId = await _db.InventoryRequestStatuses
+                            .Where(s => s.Code == RequestStatusCodes.Completed)
+                            .Select(s => s.RequestStatusId)
+                            .FirstOrDefaultAsync();
+
+                        if (completedStatusId > 0)
+                        {
+                            reqEntity.RequestStatusId = completedStatusId;
+                            await _db.SaveChangesAsync();
+                        }
+                    }
+                }
+            }
+
             return Ok(new ApiResponse<string> { Data = "Action processed successfully." });
         }
         catch (Exception ex)

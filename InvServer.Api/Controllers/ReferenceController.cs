@@ -74,6 +74,7 @@ public class ReferenceController : ControllerBase
             s.OnHandQty,
             s.ReservedQty,
             AvailableQty = s.OnHandQty - s.ReservedQty,
+            ProductReorderLevel = s.Product.ReorderLevel,
             s.UpdatedAt
         }).ToListAsync();
 
@@ -121,6 +122,10 @@ public class ReferenceController : ControllerBase
             "categories" => await HandleReference(_db.Categories, request, 
                 term => x => x.Name.ToLower().Contains(term), 
                 x => x.Name, x => new ReferenceItemDto(x.CategoryId, x.Name, x.Name, "", true)),
+
+            "units-of-measure" => await HandleReference(_db.UnitsOfMeasure, request, 
+                term => x => x.Name.ToLower().Contains(term) || x.Code.ToLower().Contains(term), 
+                x => x.Name, x => new ReferenceItemDto(x.UnitOfMeasureId, x.Code, x.Name, "", x.IsActive)),
 
             // Workflow
             "workflow-step-type" => await HandleReference(_db.WorkflowStepTypes, request, 

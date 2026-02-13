@@ -12,26 +12,37 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Package, Search } from 'lucide-react';
+import { Package, Search, Plus, Check, Edit2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { useState, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { useState, useCallback, useEffect } from 'react';
 import { debounce } from 'lodash';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { PagedResponse } from '@/lib/api/types';
+import { useUpdateReorderLevel } from '@/hooks/useInventory';
+import { toast } from '@/hooks/use-toast';
 
 interface Product {
     id: number;
+    sku: string;
     name: string;
+    categoryName: string;
+    unitOfMeasureCode: string;
+    reorderLevel: number;
 }
 
 export default function ProductsPage() {
     const [page, setPage] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editValue, setEditValue] = useState<string>('');
+    const updateReorderLevel = useUpdateReorderLevel();
 
     const { data: pagedData, isLoading } = useQuery<PagedResponse<Product[]>>({
-        queryKey: ['reference', 'products', { page: page, search: searchTerm }],
+        queryKey: ['catalog', 'products', { page: page, search: searchTerm }],
         queryFn: async () => {
-            const response = await apiClient.get('/api/reference/products', {
+            const response = await apiClient.get('/api/catalog/products', {
                 params: { pageNumber: page, pageSize: 20, searchTerm }
             });
             return response.data;
@@ -50,6 +61,21 @@ export default function ProductsPage() {
         []
     );
 
+    const handleStartEdit = (product: Product) => {
+        setEditingId(product.id);
+        setEditValue(product.reorderLevel.toString());
+    };
+
+    const handleSaveEdit = async (id: number) => {
+        try {
+            await updateReorderLevel.mutateAsync({ id, reorderLevel: Number(editValue) });
+            toast({ title: "Reorder level updated" });
+            setEditingId(null);
+        } catch (error) {
+            toast({ title: "Failed to update", variant: "destructive" });
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -57,13 +83,20 @@ export default function ProductsPage() {
                     <h1 className="text-xl font-bold">Products</h1>
                     <p className="text-sm text-muted-foreground">Catalog of all available products and assets</p>
                 </div>
-                <div className="relative w-64">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search catalog..."
-                        className="pl-9 h-9"
-                        onChange={(e) => debouncedSearch(e.target.value)}
-                    />
+                <div className="flex items-center gap-4">
+                    <div className="relative w-64">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search catalog..."
+                            className="pl-9 h-9"
+                            onChange={(e) => debouncedSearch(e.target.value)}
+                        />
+                    </div>
+                    <Button size="sm" asChild>
+                        <Link href="/reference/products/add">
+                            <Plus className="mr-2 h-4 w-4" /> Add Product
+                        </Link>
+                    </Button>
                 </div>
             </div>
 
@@ -74,7 +107,7 @@ export default function ProductsPage() {
                             <TableHead>Product</TableHead>
                             <TableHead>Category</TableHead>
                             <TableHead>Unit</TableHead>
-                            <TableHead className="text-right">Unit Cost</TableHead>
+                            <TableHead className="text-right">Reorder Level</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -109,12 +142,40 @@ export default function ProductsPage() {
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className="text-[10px]">
-                                            General
+                                            {product.categoryName || 'Uncategorized'}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell className="text-sm">EA</TableCell>
-                                    <TableCell className="text-right font-mono text-xs">
-                                        $0.00
+                                    <TableCell className="text-sm">{product.unitOfMeasureCode}</TableCell>
+                                    <TableCell className="text-right">
+                                        {editingId === product.id ? (
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Input
+                                                    type="number"
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="w-20 h-8 text-right font-mono text-xs"
+                                                    autoFocus
+                                                />
+                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={() => handleSaveEdit(product.id)}>
+                                                    <Check className="h-4 w-4" />
+                                                </Button>
+                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setEditingId(null)}>
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-end gap-2 group">
+                                                <span className="font-mono text-xs">{product.reorderLevel}</span>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={() => handleStartEdit(product)}
+                                                >
+                                                    <Edit2 className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))

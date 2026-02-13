@@ -138,26 +138,31 @@ export function Sidebar() {
                             {group.title}
                         </h2>
                         <div className="space-y-1">
-                            {group.items.map((item) => (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    className={cn(
-                                        "group flex items-center justify-between rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
-                                        pathname === item.href ? "bg-accent text-accent-foreground" : "text-muted-foreground"
-                                    )}
-                                >
-                                    <div className="flex items-center">
-                                        <item.icon className="mr-3 h-4 w-4" />
-                                        {item.name}
-                                    </div>
-                                    {item.badge && (
-                                        <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-[10px] font-bold">
-                                            {item.badge}
-                                        </Badge>
-                                    )}
-                                </Link>
-                            ))}
+                            {group.items.map((item) => {
+                                const isActive = item.href === '/'
+                                    ? pathname === '/'
+                                    : pathname.startsWith(item.href);
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className={cn(
+                                            "group flex items-center justify-between rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
+                                            isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+                                        )}
+                                    >
+                                        <div className="flex items-center">
+                                            <item.icon className="mr-3 h-4 w-4" />
+                                            {item.name}
+                                        </div>
+                                        {item.badge && (
+                                            <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-[10px] font-bold">
+                                                {item.badge}
+                                            </Badge>
+                                        )}
+                                    </Link>
+                                );
+                            })}
                         </div>
                     </div>
                 ))}

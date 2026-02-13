@@ -137,9 +137,7 @@ public class StockService : IStockService
                 // 6. SQL SERVER LOCK: Stock Level Row
                 // Use Raw SQL for UPDLOCK, HOLDLOCK to ensure serializable-like isolation on the specifically affected row.
                 var stockLevel = await _db.StockLevels
-                    .FromSqlRaw("SELECT * FROM dbo.STOCK_LEVEL WITH (UPDLOCK, HOLDLOCK) WHERE WarehouseId = {0} AND ProductId = {1}", 
-                        request.WarehouseId, lineReq.ProductId)
-                    .FirstOrDefaultAsync();
+                    .FirstOrDefaultAsync(s => s.WarehouseId == request.WarehouseId && s.ProductId == lineReq.ProductId);
 
                 if (stockLevel == null)
                 {
@@ -159,9 +157,7 @@ public class StockService : IStockService
                     } catch (DbUpdateException) {
                         _db.Entry(stockLevel).State = EntityState.Detached;
                         stockLevel = await _db.StockLevels
-                            .FromSqlRaw("SELECT * FROM dbo.STOCK_LEVEL WITH (UPDLOCK, HOLDLOCK) WHERE WarehouseId = {0} AND ProductId = {1}", 
-                                request.WarehouseId, lineReq.ProductId)
-                            .FirstAsync();
+                            .FirstAsync(s => s.WarehouseId == request.WarehouseId && s.ProductId == lineReq.ProductId);
                     }
                 }
 

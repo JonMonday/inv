@@ -17,6 +17,7 @@ public class InvDbContext : DbContext
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RolePermissionScope> RolePermissionScopes => Set<RolePermissionScope>();
     public DbSet<Category> Categories => Set<Category>();
+    public DbSet<UnitOfMeasure> UnitsOfMeasure => Set<UnitOfMeasure>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<WorkflowStep> WorkflowSteps => Set<WorkflowStep>();
     public DbSet<WorkflowStepRule> WorkflowStepRules => Set<WorkflowStepRule>();
@@ -117,6 +118,7 @@ public class InvDbContext : DbContext
             .OnDelete(DeleteBehavior.Restrict);
 
         // Inventory unique constraints
+        modelBuilder.Entity<UnitOfMeasure>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<InventoryRequest>().HasIndex(x => x.RequestNo).IsUnique();
         modelBuilder.Entity<Product>().HasIndex(x => x.SKU).IsUnique();
         modelBuilder.Entity<StockLevel>()

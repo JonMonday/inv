@@ -41,7 +41,7 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddCors(options => 
 {
     options.AddPolicy("Default", p => p
-        .WithOrigins("http://localhost:3000")
+        .WithOrigins("http://localhost:3000", "http://localhost:3001")
         .AllowAnyMethod()
         .AllowAnyHeader()
         .AllowCredentials());
@@ -115,7 +115,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseRateLimiter();
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("Default");
 app.UseAuthentication();

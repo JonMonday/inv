@@ -33,6 +33,7 @@ public static class RequestStatusCodes
     public const string Rejected = "REJECTED";
     public const string Cancelled = "CANCELLED";
     public const string WaitingForStock = "WAITING_FOR_STOCK";
+    public const string Completed = "COMPLETED";
 }
 
 public static class WorkflowActionCodes

@@ -1,6 +1,7 @@
 'use client';
 
 import { useWarehouses } from '@/hooks/useInventory';
+import Link from 'next/link';
 import {
     Table,
     TableBody,
@@ -35,8 +36,10 @@ export default function WarehousesPage() {
                     <h1 className="text-2xl font-bold tracking-tight text-foreground">Warehouses</h1>
                     <p className="text-sm text-muted-foreground">Manage storage locations and inventory hubs.</p>
                 </div>
-                <Button size="sm">
-                    <Plus className="mr-2 h-4 w-4" /> Add Warehouse
+                <Button size="sm" asChild>
+                    <Link href="/reference/warehouses/add">
+                        <Plus className="mr-2 h-4 w-4" /> Add Warehouse
+                    </Link>
                 </Button>
             </div>
 

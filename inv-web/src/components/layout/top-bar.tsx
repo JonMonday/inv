@@ -10,7 +10,8 @@ import {
     Kanban,
     Calendar,
     BarChart2,
-    Bell
+    Bell,
+    ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,8 +26,9 @@ import { useAuthStore } from '@/store/authStore';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
-export function TopBar({ title }: { title: string }) {
+export function TopBar({ breadcrumbs }: { breadcrumbs: { label: string, href: string }[] }) {
     const { setTheme, theme } = useTheme();
     const { user, clearAuth } = useAuthStore();
 
@@ -36,9 +38,29 @@ export function TopBar({ title }: { title: string }) {
 
     return (
         <header className="flex h-14 items-center justify-between border-b bg-background px-6">
-            <div className="flex items-center gap-4">
-                <h1 className="text-sm font-semibold">{title}</h1>
-                <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2 overflow-hidden">
+                {breadcrumbs.map((crumb, index) => (
+                    <div key={index} className="flex items-center gap-2 whitespace-nowrap">
+                        {index > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                        {index === breadcrumbs.length - 1 || crumb.href === '#' ? (
+                            <span className={cn(
+                                "text-[11px] font-semibold tracking-wide uppercase",
+                                index === breadcrumbs.length - 1 ? "text-foreground" : "text-muted-foreground"
+                            )}>
+                                {crumb.label}
+                            </span>
+                        ) : (
+                            <Link
+                                href={crumb.href}
+                                className="text-[11px] font-semibold tracking-wide uppercase text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                {crumb.label}
+                            </Link>
+                        )}
+                    </div>
+                ))}
+            </div>
+            {/* <div className="h-4 w-px bg-border" />
                 <Tabs defaultValue="list" className="h-8">
                     <TabsList className="bg-transparent h-8 p-0 gap-1">
                         <TabsTrigger value="list" className="h-7 px-2 text-[11px] data-[state=active]:bg-accent">
@@ -54,9 +76,7 @@ export function TopBar({ title }: { title: string }) {
                             <BarChart2 className="mr-1.5 h-3 w-3" /> Gantt
                         </TabsTrigger>
                     </TabsList>
-                </Tabs>
-            </div>
-
+                </Tabs> */}
             <div className="flex items-center gap-2">
                 <Button variant="ghost" size="icon" className="h-8 w-8">
                     <Bell className="h-4 w-4 text-muted-foreground" />
