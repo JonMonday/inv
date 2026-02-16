@@ -6,12 +6,12 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import apiClient from '@/lib/api/client';
-import { useWarehouses, useMovementTypes, usePostMovement } from '@/hooks/useInventory';
+import { useWarehouses, useMovementTypes, usePostMovement, useReasonCodes } from '@/hooks/useInventory';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import {
     Select,
@@ -25,45 +25,48 @@ import {
     Trash2,
     Search,
     Loader2,
-    Plus,
     ArrowLeft,
     Package,
-    ChevronRight,
     Save,
-    History
+    History,
+    ArrowRightLeft
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 
 const lineSchema = z.object({
     productId: z.number().min(1, 'Product is required'),
     productName: z.string(),
     qtyDeltaOnHand: z.number().refine(val => val !== 0, 'Quantity cannot be zero'),
-    qtyDeltaReserved: z.number().default(0),
+    qtyDeltaReserved: z.number().optional(),
     unitCost: z.number().min(0).optional(),
     lineNotes: z.string().optional(),
 });
 
 const movementSchema = z.object({
     warehouseId: z.number().min(1, 'Warehouse is required'),
+    toWarehouseId: z.number().optional(), // For Transfer
     movementTypeCode: z.string().min(1, 'Movement type is required'),
+    reasonCode: z.string().optional(),
     notes: z.string().min(1, 'Notes are required for manual movements'),
     lines: z.array(lineSchema).min(1, 'At least one item is required'),
+}).refine(data => {
+    if (data.movementTypeCode === 'TRANSFER' && (!data.toWarehouseId || data.toWarehouseId === 0)) {
+        return false;
+    }
+    return true;
+}, {
+    message: "Destination warehouse is required for transfers",
+    path: ["toWarehouseId"],
+}).refine(data => {
+    if (data.movementTypeCode === 'TRANSFER' && data.warehouseId === data.toWarehouseId) {
+        return false;
+    }
+    return true;
+}, {
+    message: "Cannot transfer to the same warehouse",
+    path: ["toWarehouseId"],
 });
 
-type MovementFormValues = {
-    warehouseId: number;
-    movementTypeCode: string;
-    notes: string;
-    lines: {
-        productId: number;
-        productName: string;
-        qtyDeltaOnHand: number;
-        qtyDeltaReserved: number;
-        unitCost?: number;
-        lineNotes?: string;
-    }[];
-};
+type MovementFormValues = z.infer<typeof movementSchema>;
 
 export default function ManualMovementPage() {
     const router = useRouter();
@@ -71,18 +74,21 @@ export default function ManualMovementPage() {
     const { user } = useAuthStore();
     const { data: warehouses } = useWarehouses();
     const { data: movementTypes } = useMovementTypes();
+    const { data: reasonCodes } = useReasonCodes();
     const postMovement = usePostMovement();
 
     const [productSearch, setProductSearch] = useState('');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchResults, setSearchResults] = useState<{ id: number, name: string, code: string }[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const form = useForm<MovementFormValues>({
-        resolver: zodResolver(movementSchema) as any,
+        resolver: zodResolver(movementSchema),
         defaultValues: {
             warehouseId: 0,
+            toWarehouseId: 0,
             movementTypeCode: '',
+            reasonCode: '',
             notes: '',
             lines: [],
         },
@@ -94,12 +100,14 @@ export default function ManualMovementPage() {
     });
 
     const selectedMovementType = form.watch('movementTypeCode');
-    const isReceipt = selectedMovementType === 'RECEIPT';
+    const isReceipt = ['RECEIPT', 'REFILL'].includes(selectedMovementType);
+    const isTransfer = selectedMovementType === 'TRANSFER';
 
     // Auto-set first warehouse and movement type when they load
     useEffect(() => {
-        if (warehouses?.data && (warehouses.data as any[]).length && form.getValues('warehouseId') === 0) {
-            form.setValue('warehouseId', Number((warehouses.data as any[])[0].id));
+        const data = warehouses?.data as { id: number }[] | undefined;
+        if (data && data.length && form.getValues('warehouseId') === 0) {
+            form.setValue('warehouseId', Number(data[0].id));
         }
     }, [warehouses, form]);
 
@@ -121,7 +129,7 @@ export default function ManualMovementPage() {
         return () => clearTimeout(delayDebounceFn);
     }, [productSearch]);
 
-    const addProduct = (product: any) => {
+    const addProduct = (product: { id: number, name: string }) => {
         if (fields.some(f => f.productId === product.id)) {
             toast({ variant: 'destructive', title: 'Product already added' });
             return;
@@ -146,11 +154,20 @@ export default function ManualMovementPage() {
                 userId: user?.userId,
                 lines: values.lines.map(l => {
                     let onHand = l.qtyDeltaOnHand;
-                    if (values.movementTypeCode.endsWith('_OUT') || values.movementTypeCode === 'ISSUE') {
+                    // Logic for automatic sign handling based on type
+                    if (['ISSUE', 'TRANSFER_OUT'].includes(values.movementTypeCode) || values.movementTypeCode.endsWith('_OUT')) {
                         onHand = -Math.abs(onHand);
-                    } else if (values.movementTypeCode.endsWith('_IN') || values.movementTypeCode === 'RECEIPT') {
+                    } else if (['RECEIPT', 'REFILL', 'RETURN', 'TRANSFER_IN'].includes(values.movementTypeCode) || values.movementTypeCode.endsWith('_IN')) {
+                        onHand = Math.abs(onHand);
+                    } else if (values.movementTypeCode === 'TRANSFER') {
+                        // Backend coupled logic expects positive for transfer requests to handle coupled movements usually, 
+                        // but let's send positive and let backend split it.
                         onHand = Math.abs(onHand);
                     }
+                    // For ADJUSTMENT, we trust the sign entered by user? 
+                    // Or usually Adjustments are absolute? 
+                    // If user selects "Adjustment", they might type -5 or 5.
+                    // If type is ADJUSTMENT, we leave it as is.
                     return { ...l, qtyDeltaOnHand: onHand };
                 })
             };
@@ -158,11 +175,12 @@ export default function ManualMovementPage() {
             await postMovement.mutateAsync(payload);
             toast({ title: 'Success', description: 'Stock movement posted successfully' });
             router.push('/inventory/movements');
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
             toast({
                 variant: 'destructive',
                 title: 'Error',
-                description: error.response?.data?.message || 'Failed to post movement'
+                description: err.response?.data?.message || 'Failed to post movement'
             });
         } finally {
             setIsSubmitting(false);
@@ -206,10 +224,12 @@ export default function ManualMovementPage() {
                                         name="warehouseId"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Warehouse</FormLabel>
+                                                <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                                    {isTransfer ? 'Source Warehouse' : 'Warehouse'}
+                                                </FormLabel>
                                                 <Select
                                                     onValueChange={(v) => field.onChange(Number(v))}
-                                                    value={field.value?.toString()}
+                                                    value={field.value !== 0 ? field.value?.toString() : ""}
                                                 >
                                                     <FormControl>
                                                         <SelectTrigger>
@@ -217,7 +237,7 @@ export default function ManualMovementPage() {
                                                         </SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent>
-                                                        {(warehouses?.data as any[])?.map((w: any) => (
+                                                        {(warehouses?.data as { id: number, name: string }[] | undefined)?.map((w) => (
                                                             <SelectItem key={w.id} value={w.id.toString()}>{w.name}</SelectItem>
                                                         ))}
                                                     </SelectContent>
@@ -226,6 +246,36 @@ export default function ManualMovementPage() {
                                             </FormItem>
                                         )}
                                     />
+
+                                    {isTransfer && (
+                                        <FormField
+                                            control={form.control}
+                                            name="toWarehouseId"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                                                        <ArrowRightLeft className="h-3 w-3" /> Destination Warehouse
+                                                    </FormLabel>
+                                                    <Select
+                                                        onValueChange={(v) => field.onChange(Number(v))}
+                                                        value={field.value !== 0 ? field.value?.toString() : ""}
+                                                    >
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select destination..." />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {(warehouses?.data as { id: number, name: string }[] | undefined)?.filter((w) => w.id !== form.getValues('warehouseId')).map((w) => (
+                                                                <SelectItem key={w.id} value={w.id.toString()}>{w.name}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    )}
 
                                     <FormField
                                         control={form.control}
@@ -240,8 +290,32 @@ export default function ManualMovementPage() {
                                                         </SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent>
-                                                        {(movementTypes?.data as any[])?.filter((mt: any) => !['RESERVE', 'RELEASE', 'CONSUME_RESERVE'].includes(mt.code)).map((mt: any) => (
+                                                        {(movementTypes?.data as { code: string, name: string }[] | undefined)?.filter((mt) => ['REFILL', 'RETURN', 'TRANSFER', 'ADJUSTMENT'].includes(mt.code)).map((mt) => (
                                                             <SelectItem key={mt.code} value={mt.code}>{mt.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="reasonCode"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reason Code</FormLabel>
+                                                <Select onValueChange={(val) => field.onChange(val === '_none' ? '' : val)} value={field.value || '_none'}>
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Optional reason..." />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        <SelectItem value="_none">None</SelectItem>
+                                                        {(reasonCodes?.data as { code: string, name: string }[] | undefined)?.map((rc) => (
+                                                            <SelectItem key={rc.code} value={rc.code}>{rc.name}</SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select>

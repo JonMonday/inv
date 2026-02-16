@@ -119,7 +119,7 @@ export function useUpdateFulfillmentWarehouse() {
 export function useUpdateRequest() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ requestId, data }: { requestId: number, data: any }) => {
+        mutationFn: async ({ requestId, data }: { requestId: number, data: Record<string, unknown> }) => {
             const response = await apiClient.put(`/api/inventory/requests/${requestId}`, data);
             return response.data;
         },

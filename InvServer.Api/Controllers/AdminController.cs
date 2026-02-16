@@ -1,4 +1,3 @@
-using Azure.Core;
 using InvServer.Api.Filters;
 using InvServer.Core.Entities;
 using InvServer.Core.Interfaces;

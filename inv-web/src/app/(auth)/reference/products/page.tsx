@@ -16,7 +16,7 @@ import { Package, Search, Plus, Check, Edit2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { debounce } from 'lodash';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { PagedResponse } from '@/lib/api/types';
@@ -53,12 +53,12 @@ export default function ProductsPage() {
     const totalPages = pagedData?.totalPages || 0;
     const totalRecords = pagedData?.totalRecords || 0;
 
-    const debouncedSearch = useCallback(
-        debounce((term: string) => {
+    const debouncedSearch = useMemo(
+        () => debounce((term: string) => {
             setSearchTerm(term);
             setPage(1);
         }, 500),
-        []
+        [setSearchTerm, setPage]
     );
 
     const handleStartEdit = (product: Product) => {
@@ -66,15 +66,15 @@ export default function ProductsPage() {
         setEditValue(product.reorderLevel.toString());
     };
 
-    const handleSaveEdit = async (id: number) => {
+    const handleSaveEdit = useCallback(async (id: number) => {
         try {
             await updateReorderLevel.mutateAsync({ id, reorderLevel: Number(editValue) });
             toast({ title: "Reorder level updated" });
             setEditingId(null);
-        } catch (error) {
-            toast({ title: "Failed to update", variant: "destructive" });
+        } catch (err) {
+            console.error('Failed to update reorder level:', err);
         }
-    };
+    }, [updateReorderLevel, editValue, setEditingId]);
 
     return (
         <div className="space-y-6">

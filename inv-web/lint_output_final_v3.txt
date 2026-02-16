@@ -1,0 +1,24 @@
+
+> inv-web@0.1.0 lint
+> next lint
+
+
+./src/app/(auth)/admin/permissions/page.tsx
+7:20  Error: 'useCallback' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/admin/roles/page.tsx
+9:20  Error: 'useCallback' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/admin/users/page.tsx
+6:20  Error: 'useCallback' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/admin/workflows/page.tsx
+3:20  Error: 'useCallback' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/inventory/movements/page.tsx
+3:27  Error: 'useCallback' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/requests/[id]/page.tsx
+4:10  Error: 'useAuthStore' is defined but never used.  @typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules

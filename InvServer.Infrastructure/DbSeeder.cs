@@ -159,20 +159,44 @@ public static class DbSeeder
             );
         }
 
-        if (!await context.InventoryMovementTypes.AnyAsync())
+        if (!await context.RejectionModes.AnyAsync())
         {
-            context.InventoryMovementTypes.AddRange(
-                new InventoryMovementType { Code = MovementTypeCodes.Receipt, Name = "Stock Receipt" },
-                new InventoryMovementType { Code = MovementTypeCodes.Issue, Name = "Stock Issue" },
-                new InventoryMovementType { Code = MovementTypeCodes.TransferOut, Name = "Transfer Out" },
-                new InventoryMovementType { Code = MovementTypeCodes.TransferIn, Name = "Transfer In" },
-                new InventoryMovementType { Code = MovementTypeCodes.AdjustmentIn, Name = "Adjustment In" },
-                new InventoryMovementType { Code = MovementTypeCodes.AdjustmentOut, Name = "Adjustment Out" },
-                new InventoryMovementType { Code = MovementTypeCodes.Reserve, Name = "Reservation" },
-                new InventoryMovementType { Code = MovementTypeCodes.Release, Name = "Reservation Release" },
-                new InventoryMovementType { Code = MovementTypeCodes.ConsumeReserve, Name = "Consume Reservation" }
+            context.RejectionModes.AddRange(
+                new RejectionMode { Code = RejectionModeCodes.Start, Name = "Back to Start" },
+                new RejectionMode { Code = RejectionModeCodes.Previous, Name = "Back to Previous Step" }
             );
         }
+
+        var types = new List<InventoryMovementType>
+        {
+            // User Visible
+            new InventoryMovementType { Code = MovementTypeCodes.Refill, Name = "Refill (Stock In)" },
+            new InventoryMovementType { Code = MovementTypeCodes.Return, Name = "Return (Stock In)" },
+            new InventoryMovementType { Code = MovementTypeCodes.Adjustment, Name = "Inventory Adjustment" },
+            new InventoryMovementType { Code = MovementTypeCodes.Transfer, Name = "Transfer (Cross-Warehouse)" },
+            
+            // System / Workflow
+            new InventoryMovementType { Code = MovementTypeCodes.TransferOut, Name = "Transfer Out" },
+            new InventoryMovementType { Code = MovementTypeCodes.TransferIn, Name = "Transfer In" },
+            new InventoryMovementType { Code = MovementTypeCodes.Reserve, Name = "Reservation" },
+            new InventoryMovementType { Code = MovementTypeCodes.Release, Name = "Reservation Release" },
+            new InventoryMovementType { Code = MovementTypeCodes.ConsumeReserve, Name = "Consume Reservation" },
+            new InventoryMovementType { Code = MovementTypeCodes.Issue, Name = "Stock Issue (Workflow)" },
+            new InventoryMovementType { Code = MovementTypeCodes.Receipt, Name = "Initial Receipt" },
+            new InventoryMovementType { Code = MovementTypeCodes.AdjustmentIn, Name = "Adjustment In" },
+            new InventoryMovementType { Code = MovementTypeCodes.AdjustmentOut, Name = "Adjustment Out" }
+        };
+
+        bool typesAdded = false;
+        foreach (var t in types)
+        {
+            if (!await context.InventoryMovementTypes.AsNoTracking().AnyAsync(x => x.Code == t.Code))
+            {
+                context.InventoryMovementTypes.Add(t);
+                typesAdded = true;
+            }
+        }
+        if (typesAdded) await context.SaveChangesAsync();
 
         if (!await context.InventoryMovementStatuses.AnyAsync())
         {
@@ -332,6 +356,7 @@ public static class DbSeeder
 
             // Workflow Templates
             "workflow_template.read", "workflow_template.create", "workflow_template.update", "workflow_template.deactivate",
+            "workflow_template.publish", "workflow_template.clone",
             "workflow_step.manage", "workflow_step_rule.manage", "workflow_transition.manage",
             "workflow_task.read_my","workflow_task.read_all","workflow_task.claim","workflow_task.action","workflow_task.read_eligible_assignees",
             "workflow_lookup.step_type.manage", "workflow_lookup.action_type.manage",
@@ -615,7 +640,7 @@ public static class DbSeeder
         // ==============================================================================
         // 8. Workflow Templates (NO VERSIONS)
         // ==============================================================================
-        async Task<WorkflowTemplate> EnsureWorkflowTemplate(string code, string name)
+        async Task<WorkflowTemplate> EnsureWorkflowTemplate(string code, string name, long? departmentId, long? rejectionModeId)
         {
             var tpl = await context.WorkflowTemplates.FirstOrDefaultAsync(t => t.Code == code);
             if (tpl == null)
@@ -626,14 +651,18 @@ public static class DbSeeder
                     Name = name,
                     Status = "PUBLISHED",
                     IsActive = true,
+                    DepartmentId = departmentId,
+                    RejectionModeId = rejectionModeId,
                     CreatedAt = DateTime.UtcNow
                 };
                 context.WorkflowTemplates.Add(tpl);
                 await context.SaveChangesAsync();
             }
-            else if (tpl.Status != "PUBLISHED")
+            else if (tpl.Status != "PUBLISHED" || tpl.DepartmentId != departmentId || tpl.RejectionModeId != rejectionModeId)
             {
                 tpl.Status = "PUBLISHED";
+                tpl.DepartmentId = departmentId;
+                tpl.RejectionModeId = rejectionModeId;
                 context.WorkflowTemplates.Update(tpl);
                 await context.SaveChangesAsync();
             }
@@ -645,17 +674,24 @@ public static class DbSeeder
         var stepTypes = await context.WorkflowStepTypes.ToDictionaryAsync(t => t.Code, t => t.WorkflowStepTypeId);
         var actionTypes = await context.WorkflowActionTypes.ToDictionaryAsync(t => t.Code, t => t.WorkflowActionTypeId);
 
+        // Get departments and rejection modes for assignment
+        var financeDept = await context.Departments.FirstOrDefaultAsync(d => d.Name == "Finance");
+        var procurementDept = await context.Departments.FirstOrDefaultAsync(d => d.Name == "Procurement");
+        var operationsDept = await context.Departments.FirstOrDefaultAsync(d => d.Name == "Operations");
+        var backToStartMode = await context.RejectionModes.FirstOrDefaultAsync(r => r.Code == RejectionModeCodes.Start);
+        var backToPreviousMode = await context.RejectionModes.FirstOrDefaultAsync(r => r.Code == RejectionModeCodes.Previous);
+
         // Template definitions
         var templates = new[]
         {
-    new { Code = "SIMPLE_APPROVE", Name = "Simple Approval Flow", ApproverRole = "MANAGER" },
-    new { Code = "FINANCE_FLOW",   Name = "Finance Approval Flow", ApproverRole = "ADMIN" },
-    new { Code = "STOCK_FLOW",     Name = "Stock Fulfillment Flow", ApproverRole = "MANAGER" },
+    new { Code = "SIMPLE_APPROVE", Name = "Simple Approval Flow", ApproverRole = "MANAGER", DepartmentId = operationsDept?.DepartmentId, RejectionModeId = backToPreviousMode?.RejectionModeId },
+    new { Code = "FINANCE_FLOW",   Name = "Finance Approval Flow", ApproverRole = "ADMIN", DepartmentId = financeDept?.DepartmentId, RejectionModeId = backToStartMode?.RejectionModeId },
+    new { Code = "STOCK_FLOW",     Name = "Stock Fulfillment Flow", ApproverRole = "MANAGER", DepartmentId = procurementDept?.DepartmentId, RejectionModeId = backToPreviousMode?.RejectionModeId },
 };
 
         foreach (var t in templates)
         {
-            var tpl = await EnsureWorkflowTemplate(t.Code, t.Name);
+            var tpl = await EnsureWorkflowTemplate(t.Code, t.Name, t.DepartmentId, t.RejectionModeId);
 
             // If steps already exist for this template, skip (idempotent)
             if (await context.WorkflowSteps.AnyAsync(s => s.WorkflowTemplateId == tpl.WorkflowTemplateId))
@@ -679,7 +715,7 @@ public static class DbSeeder
                 Name = "Approval",
                 WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Approval],
                 SequenceNo = 1,
-                IsSystemRequired = true
+                IsSystemRequired = false
             };
 
             var sFulfillment = new WorkflowStep

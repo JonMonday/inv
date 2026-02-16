@@ -59,6 +59,7 @@ export interface WorkflowStep {
         departmentName?: string;
         minApprovers: number;
         requireAll: boolean;
+        allowRequesterSelect: boolean;
     };
 }
 
@@ -80,6 +81,8 @@ export interface WorkflowTemplate {
     publishedAt?: string;
     steps?: WorkflowStep[];
     transitions?: WorkflowTransition[];
+    departmentId?: number;
+    rejectionModeId?: number;
 }
 
 export function useUsers(request: PagedRequest = { pageNumber: 1, pageSize: 10 }) {
@@ -174,6 +177,49 @@ export function usePublishWorkflow() {
     return useMutation({
         mutationFn: async (id: number) => {
             const response = await apiClient.post(`/api/workflow/templates/${id}/publish`);
+            return response.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['workflow', 'templates'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'workflow'] });
+        },
+    });
+}
+
+export function useUpdateTemplateMeta() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, data }: { id: number, data: { name: string, departmentId: number, rejectionModeId: number, isActive: boolean } }) => {
+            const response = await apiClient.put(`/api/workflow/templates/${id}/meta`, data);
+            return response.data;
+        },
+        onSuccess: (_, { id }) => {
+            queryClient.invalidateQueries({ queryKey: ['workflow', 'templates'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'workflow', id] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'workflow', id.toString()] });
+        },
+    });
+}
+
+export function useUpsertTemplateDefinition() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, data }: { id: number, data: { steps: { stepKey: string, name: string, sequenceNo: number }[], transitions?: any[] } }) => {
+            const response = await apiClient.put(`/api/workflow/templates/${id}/definition`, data);
+            return response.data;
+        },
+        onSuccess: (_, { id }) => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'workflow', id] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'workflow', id.toString()] });
+        },
+    });
+}
+
+export function useToggleWorkflowActive() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (id: number) => {
+            const response = await apiClient.post(`/api/workflow/templates/${id}/toggle-active`);
             return response.data;
         },
         onSuccess: () => {

@@ -13,15 +13,10 @@ import {
     Warehouse,
     History,
     FileText,
-    BarChart3,
-    ShieldCheck,
-    Settings,
-    HelpCircle,
-    PlusCircle,
-    Inbox,
     FilePlus2,
-    ClipboardList,
-    Users
+    Users,
+    ShieldCheck,
+    Inbox,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';

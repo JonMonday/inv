@@ -60,7 +60,7 @@ builder.Services.AddSwaggerGen();
 
 // Database
 builder.Services.AddDbContext<InvDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Auth & RBAC
 builder.Services.AddMemoryCache();
@@ -97,7 +97,31 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<InvDbContext>();
-    await context.Database.EnsureCreatedAsync();
+    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    
+    // Check if database exists, create if not
+    try
+    {
+        await context.Database.MigrateAsync();
+    }
+    catch (Npgsql.PostgresException ex) when (ex.SqlState == "08P01" || ex.Message.Contains("does not exist"))
+    {
+        // Database doesn't exist, create it
+        var connectionString = config.GetConnectionString("DefaultConnection");
+        var builder2 = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+        var dbName = builder2.Database;
+        builder2.Database = "postgres"; // Connect to system database
+        
+        using var conn = new Npgsql.NpgsqlConnection(builder2.ToString());
+        await conn.OpenAsync();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"CREATE DATABASE \"{dbName}\"";
+        await cmd.ExecuteNonQueryAsync();
+        
+        // Now run migrations
+        await context.Database.MigrateAsync();
+    }
+    
     await DbSeeder.SeedAsync(context);
 }
 

@@ -45,10 +45,11 @@ export default function WarehouseAddPage() {
                 description: "The warehouse has been successfully created."
             });
             router.push('/reference/warehouses');
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
             toast({
                 title: "Error",
-                description: error.response?.data?.message || 'Failed to create warehouse',
+                description: err.response?.data?.message || 'Failed to create warehouse',
                 variant: "destructive"
             });
         }

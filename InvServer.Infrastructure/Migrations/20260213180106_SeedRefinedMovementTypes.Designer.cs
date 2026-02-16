@@ -3,6 +3,7 @@ using System;
 using InvServer.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace InvServer.Infrastructure.Migrations
 {
     [DbContext(typeof(InvDbContext))]
-    partial class InvDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260213180106_SeedRefinedMovementTypes")]
+    partial class SeedRefinedMovementTypes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -163,11 +166,6 @@ namespace InvServer.Infrastructure.Migrations
                         .HasColumnType("bigint");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("DepartmentId"));
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -523,32 +521,6 @@ namespace InvServer.Infrastructure.Migrations
                     b.HasIndex("UnitOfMeasureId");
 
                     b.ToTable("PRODUCT");
-                });
-
-            modelBuilder.Entity("InvServer.Core.Entities.RejectionMode", b =>
-                {
-                    b.Property<long>("RejectionModeId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("RejectionModeId"));
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("RejectionModeId");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.ToTable("WORKFLOW_REJECTION_MODE");
                 });
 
             modelBuilder.Entity("InvServer.Core.Entities.Reservation", b =>
@@ -1543,9 +1515,6 @@ namespace InvServer.Infrastructure.Migrations
                     b.Property<long?>("CreatedByUserId")
                         .HasColumnType("bigint");
 
-                    b.Property<long?>("DepartmentId")
-                        .HasColumnType("bigint");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -1558,9 +1527,6 @@ namespace InvServer.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<long?>("PublishedByUserId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("RejectionModeId")
                         .HasColumnType("bigint");
 
                     b.Property<long?>("SourceTemplateId")
@@ -1576,12 +1542,8 @@ namespace InvServer.Infrastructure.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.HasIndex("DepartmentId");
-
                     b.HasIndex("Name")
                         .IsUnique();
-
-                    b.HasIndex("RejectionModeId");
 
                     b.HasIndex("SourceTemplateId");
 
@@ -2160,21 +2122,9 @@ namespace InvServer.Infrastructure.Migrations
 
             modelBuilder.Entity("InvServer.Core.Entities.WorkflowTemplate", b =>
                 {
-                    b.HasOne("InvServer.Core.Entities.Department", "Department")
-                        .WithMany()
-                        .HasForeignKey("DepartmentId");
-
-                    b.HasOne("InvServer.Core.Entities.RejectionMode", "RejectionMode")
-                        .WithMany()
-                        .HasForeignKey("RejectionModeId");
-
                     b.HasOne("InvServer.Core.Entities.WorkflowTemplate", "SourceTemplate")
                         .WithMany()
                         .HasForeignKey("SourceTemplateId");
-
-                    b.Navigation("Department");
-
-                    b.Navigation("RejectionMode");
 
                     b.Navigation("SourceTemplate");
                 });

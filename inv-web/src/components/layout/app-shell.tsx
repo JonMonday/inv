@@ -40,7 +40,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     // Map pathname to breadcrumbs
     const getBreadcrumbs = () => {
-        const segments: { label: string, href: string }[] = [];
 
         // Workflows
         if (pathname === '/tasks') return [{ label: 'Workflows', href: '#' }, { label: 'Inbox', href: '/tasks' }];

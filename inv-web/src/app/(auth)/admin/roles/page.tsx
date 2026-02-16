@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useRoles } from '@/hooks/useAdmin';
-import { useState, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { Input } from '@/components/ui/input';
 import { debounce } from 'lodash';
@@ -34,12 +34,12 @@ export default function RolesPage() {
     const totalPages = rolesData?.totalPages || 0;
     const totalRecords = rolesData?.totalRecords || 0;
 
-    const debouncedSearch = useCallback(
-        debounce((term: string) => {
+    const debouncedSearch = useMemo(
+        () => debounce((term: string) => {
             setSearchTerm(term);
             setPage(1);
         }, 500),
-        []
+        [setSearchTerm, setPage]
     );
 
     if (isLoading && !rolesData) {

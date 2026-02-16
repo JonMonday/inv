@@ -16,6 +16,8 @@ public class StockMovement
     public long MovementStatusId { get; set; }
 
     public long? ReasonCodeId { get; set; }
+    [ForeignKey(nameof(ReasonCodeId))]
+    public InventoryReasonCode? ReasonCode { get; set; }
 
     public long WarehouseId { get; set; }
     [ForeignKey(nameof(WarehouseId))]

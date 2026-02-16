@@ -1,29 +1,26 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/authStore';
 import { useTasks } from '@/hooks/useTasks';
 import { useRequest, useRequestHistory, useUpdateFulfillmentWarehouse, useUpdateFulfillmentQuantities } from '@/hooks/useRequests';
 import { useWarehouses, useStockLevels } from '@/hooks/useInventory';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 import {
     Loader2,
     AlertCircle,
     ArrowLeft,
     Calendar,
-    Building2,
-    Warehouse,
     ClipboardList,
     CheckCircle2,
-    UserCheck,
     ShieldCheck,
     Workflow,
-    Package,
+    Building2,
+    Warehouse,
     User,
     GitBranch,
-    Save
+    Save,
+    UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +40,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { WorkflowDiagram } from '@/components/requests/WorkflowDiagram';
 import { TaskActionBar } from '@/components/workflow/TaskActionBar';
@@ -51,7 +47,6 @@ import { TaskActionBar } from '@/components/workflow/TaskActionBar';
 export default function RequestDetailPage() {
     const { id } = useParams();
     const router = useRouter();
-    const { user } = useAuthStore();
     const { data: request, isLoading } = useRequest(Number(id));
     const { data: historyData, isLoading: historyLoading } = useRequestHistory(Number(id));
     const { tasksQuery } = useTasks(); // Fetch my tasks to see if I have one for this request
@@ -74,7 +69,7 @@ export default function RequestDetailPage() {
     useEffect(() => {
         if (request?.lines) {
             const initialQs: Record<number, number> = {};
-            request.lines.forEach((l: any) => {
+            (request.lines as { productId: number, qtyApproved: number | null, qtyRequested: number }[]).forEach((l) => {
                 initialQs[l.productId] = l.qtyApproved ?? l.qtyRequested;
             });
             setApprovedQuantities(initialQs);
@@ -105,13 +100,13 @@ export default function RequestDetailPage() {
 
     const hasQuantityChanges = () => {
         if (!request?.lines) return false;
-        return request.lines.some((l: any) =>
+        return (request.lines as { productId: number, qtyApproved: number | null, qtyRequested: number }[]).some((l) =>
             approvedQuantities[l.productId] !== (l.qtyApproved ?? l.qtyRequested)
         );
     };
 
     // Find active task for this request assigned to me
-    const myActiveTask = tasksQuery.data?.data?.find((t: any) =>
+    const myActiveTask = (tasksQuery.data?.data as { requestId: number, status: string, stepKey: string, stepName: string, id: number }[] | undefined)?.find((t) =>
         t.requestId === Number(id) &&
         (t.status === 'PENDING' || t.status === 'CLAIMED')
     );
@@ -126,17 +121,17 @@ export default function RequestDetailPage() {
     useEffect(() => {
         const whs = warehousesQuery.data?.data;
         if (isFulfillmentStep && canAction && !request?.warehouseId && whs && whs.length > 0) {
-            const firstWH = whs[0] as any;
+            const firstWH = whs[0] as { warehouseId: number };
             updateWH.mutate({ requestId: Number(id), warehouseId: firstWH.warehouseId });
         }
-    }, [isFulfillmentStep, canAction, request?.warehouseId, warehousesQuery.data]);
+    }, [isFulfillmentStep, canAction, request?.warehouseId, warehousesQuery.data, id, updateWH]);
 
     // Calculate rejection counts per step
     const getRejectionCount = (stepKey: string) => {
         if (!rawTasks) return 0;
-        return rawTasks.filter((t: any) =>
+        return (rawTasks as { stepKey: string, actions: { actionType: string }[] }[]).filter((t) =>
             t.stepKey === stepKey &&
-            t.actions?.some((a: any) =>
+            t.actions?.some((a) =>
                 a.actionType?.toLowerCase().includes('reject') ||
                 a.actionType?.toLowerCase().includes('dispute')
             )
@@ -226,7 +221,7 @@ export default function RequestDetailPage() {
                                             </div>
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {warehousesQuery.data?.data?.map((wh: any, idx: number) => (
+                                            {(warehousesQuery.data?.data as { warehouseId: number, name: string }[] | undefined)?.map((wh, idx) => (
                                                 <SelectItem key={wh.warehouseId || idx} value={String(wh.warehouseId)}>
                                                     {wh.name}
                                                 </SelectItem>
@@ -287,7 +282,7 @@ export default function RequestDetailPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody className="divide-y">
-                                            {request.lines.map((line: any, index: number) => (
+                                            {(request.lines as { requestLineId: number, productId: number, product?: { name?: string, sku?: string }, qtyRequested: number, qtyApproved: number | null, qtyFulfilled: number }[]).map((line, index) => (
                                                 <TableRow key={line.requestLineId || index} className="hover:bg-accent/5 transition-colors h-14">
                                                     <td className="p-3 text-center text-xs text-muted-foreground font-mono">{index + 1}</td>
                                                     <TableCell>
@@ -298,7 +293,7 @@ export default function RequestDetailPage() {
                                                     </TableCell>
                                                     <TableCell className="text-center">
                                                         <Badge variant="outline" className="font-mono text-[10px]">
-                                                            {warehouseStock.find((s: any) => s.productId === line.productId)?.availableQty ?? 0}
+                                                            {(warehouseStock as { productId: number, availableQty: number }[]).find((s) => s.productId === line.productId)?.availableQty ?? 0}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-center font-mono font-bold text-sm bg-muted/5">{line.qtyRequested}</TableCell>
@@ -375,7 +370,7 @@ export default function RequestDetailPage() {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y">
-                                                    {rawTasks.length > 0 ? rawTasks.map((t: any, idx: number) => (
+                                                    {rawTasks.length > 0 ? (rawTasks as { workflowTaskId: number, stepName: string, statusCode: string, status: string, claimedBy?: { displayName: string }, assignees: { displayName: string }[], completedAt?: string }[]).map((t, idx) => (
                                                         <tr key={t.workflowTaskId || idx} className="hover:bg-accent/5 transition-colors">
                                                             <td className="p-2 font-bold">{t.stepName}</td>
                                                             <td className="p-2 text-center">
@@ -387,7 +382,7 @@ export default function RequestDetailPage() {
                                                                 {t.claimedBy ? (
                                                                     <span className="font-bold text-foreground">Done by: {t.claimedBy.displayName}</span>
                                                                 ) : (
-                                                                    <span>Assigned to: {t.assignees.map((a: any) => a.displayName).join(', ') || 'N/A'}</span>
+                                                                    <span>Assigned to: {t.assignees.map((a) => a.displayName).join(', ') || 'N/A'}</span>
                                                                 )}
                                                             </td>
                                                             <td className="p-2 text-right tabular-nums text-muted-foreground">
@@ -431,14 +426,14 @@ export default function RequestDetailPage() {
                                 <div className="flex justify-center py-6">
                                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                                 </div>
-                            ) : history?.map((step: any, idx: number) => {
+                            ) : (history as { workflowStepId: number, status: string, stepKey: string, stepName: string, assignees?: { displayName: string }[], completedAt?: string }[]).map((step, idx) => {
                                 const isDone = step.status === 'COMPLETED';
                                 const isActive = step.status === 'AVAILABLE' || step.status === 'CLAIMED' || step.status === 'ACTIVE';
 
                                 // Find explicit manual assignments for this step
-                                const stepManualAssignments = manualAssignments
-                                    .filter((ma: any) => ma.workflowStepId === step.workflowStepId)
-                                    .map((ma: any) => ma.userDisplayName);
+                                const stepManualAssignments = (manualAssignments as { workflowStepId: number, userDisplayName: string }[])
+                                    .filter((ma) => ma.workflowStepId === step.workflowStepId)
+                                    .map((ma) => ma.userDisplayName);
 
                                 const rejectionCount = getRejectionCount(step.stepKey);
 
@@ -472,7 +467,7 @@ export default function RequestDetailPage() {
                                                 <p className="text-[10px] leading-tight flex-1">
                                                     <span className="font-bold text-muted-foreground uppercase tracking-widest mr-1">Assignee:</span>
                                                     <span className="font-semibold text-foreground">
-                                                        {(step.assignees || []).map((a: any) => a.displayName).join(', ') || 'To be determined'}
+                                                        {(step.assignees || []).map((a) => a.displayName).join(', ') || 'To be determined'}
                                                     </span>
                                                 </p>
                                             </div>
@@ -526,19 +521,3 @@ export default function RequestDetailPage() {
 
 
 
-function TimelineItem({
-    title,
-    subtitle,
-    icon,
-    isCompleted,
-    active
-}: {
-    title: string;
-    subtitle: string;
-    icon: React.ReactNode;
-    isCompleted: boolean;
-    active?: boolean;
-}) {
-    // This is now deprecated but kept for backward compatibility if needed elsewhere
-    return null;
-}

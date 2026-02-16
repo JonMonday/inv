@@ -37,7 +37,7 @@ public class IdempotencyIntegrationTests : IDisposable
         _db.InventoryMovementTypes.Add(new InventoryMovementType { Code = MovementTypeCodes.Issue, Name = "Issue" });
         _db.InventoryMovementStatuses.Add(new InventoryMovementStatus { Code = MovementStatusCodes.Posted, Name = "Posted" });
         _db.Warehouses.Add(new Warehouse { WarehouseId = 1, Name = "Main Warehouse" });
-        _db.Products.Add(new Product { ProductId = 1, Name = "Test Product", SKU = "SKU001", UnitOfMeasure = "EA" });
+        _db.Products.Add(new Product { ProductId = 1, Name = "Test Product", SKU = "SKU001", UnitOfMeasure = new UnitOfMeasure { Code = "EA", Name = "Each" } });
         _db.StockLevels.Add(new StockLevel { WarehouseId = 1, ProductId = 1, OnHandQty = 100, ReservedQty = 0, UpdatedAt = DateTime.UtcNow });
         _db.SaveChanges();
     }

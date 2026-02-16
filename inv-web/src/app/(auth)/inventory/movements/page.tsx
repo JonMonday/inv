@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import { useState, useMemo, Fragment } from 'react';
+import { debounce } from 'lodash';
 
-import Link from 'next/link';
 import { useMovements } from '@/hooks/useInventory';
 import {
     Table,
@@ -29,7 +29,6 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PaginationControls } from '@/components/ui/pagination-controls';
-import { debounce } from 'lodash';
 
 interface StockMovementLine {
     productId: number;
@@ -45,6 +44,9 @@ interface StockMovement {
     performedBy: string;
     createdAt: string;
     referenceNo?: string;
+    reasonCode?: string;
+    reasonName?: string;
+    notes?: string;
     warehouseId: number;
     linesCount: number;
     lines: StockMovementLine[];
@@ -60,12 +62,12 @@ export default function StockMovementsPage() {
     const totalPages = movementsData?.totalPages || 0;
     const totalRecords = movementsData?.totalRecords || 0;
 
-    const debouncedSearch = useCallback(
-        debounce((term: string) => {
+    const debouncedSearch = useMemo(
+        () => debounce((term: string) => {
             setSearchTerm(term);
             setPage(1);
         }, 500),
-        []
+        [setSearchTerm, setPage]
     );
 
     const toggleRow = (id: number) => {
@@ -89,6 +91,12 @@ export default function StockMovementsPage() {
             'ADJUSTMENT_IN': { color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20', icon: <Plus className="h-3 w-3" /> },
             'ADJUSTMENT_OUT': { color: 'bg-rose-500/10 text-rose-500 border-rose-500/20', icon: <Plus className="h-3 w-3" /> },
             'RETURN_IN': { color: 'bg-blue-500/10 text-blue-500 border-blue-500/20', icon: <Plus className="h-3 w-3" /> },
+            // New Types
+            'REFILL': { color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20', icon: <Plus className="h-3 w-3" /> },
+            'RETURN': { color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20', icon: <Plus className="h-3 w-3" /> },
+            'TRANSFER_OUT': { color: 'bg-amber-500/10 text-amber-500 border-amber-500/20', icon: <ArrowRightLeft className="h-3 w-3" /> },
+            'TRANSFER_IN': { color: 'bg-amber-500/10 text-amber-500 border-amber-500/20', icon: <ArrowRightLeft className="h-3 w-3" /> },
+            'ADJUSTMENT': { color: 'bg-gray-500/10 text-gray-500 border-gray-500/20', icon: <Tag className="h-3 w-3" /> },
         };
         const config = types[type] || { color: 'bg-slate-500/10 text-slate-500 border-slate-500/20', icon: <Tag className="h-3 w-3" /> };
         return (
@@ -153,7 +161,7 @@ export default function StockMovementsPage() {
                             </TableRow>
                         ) : (
                             (movements as StockMovement[]).map((m) => (
-                                <React.Fragment key={m.stockMovementId}>
+                                <Fragment key={m.stockMovementId}>
                                     <TableRow
                                         className="group hover:bg-muted/30 transition-colors cursor-pointer"
                                         onClick={() => toggleRow(m.stockMovementId)}
@@ -201,6 +209,20 @@ export default function StockMovementsPage() {
                                             <TableCell colSpan={6} className="p-0">
                                                 <div className="px-6 py-4 animate-in slide-in-from-top-2 duration-200">
                                                     <div className="rounded-md border bg-background/50">
+                                                        <div className="p-3 text-xs border-b bg-muted/20">
+                                                            <div className="flex gap-4">
+                                                                <div className="flex-1">
+                                                                    <span className="font-bold text-muted-foreground mr-2">NOTES:</span>
+                                                                    <span className="text-foreground">{m.notes || 'No notes provided.'}</span>
+                                                                </div>
+                                                                {m.reasonName && (
+                                                                    <div>
+                                                                        <span className="font-bold text-muted-foreground mr-2">REASON:</span>
+                                                                        <Badge variant="secondary" className="text-[10px]">{m.reasonName}</Badge>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                         <Table>
                                                             <TableHeader className="bg-muted/50">
                                                                 <TableRow className="h-8">
@@ -234,10 +256,9 @@ export default function StockMovementsPage() {
                                                         </Table>
                                                     </div>
                                                 </div>
-                                            </TableCell>
-                                        </TableRow>
+                                            </TableCell>                                        </TableRow>
                                     )}
-                                </React.Fragment>
+                                </Fragment>
                             ))
                         )}
                     </TableBody>

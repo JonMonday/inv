@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { WorkflowStep, WorkflowTransition, WorkflowTemplate } from '@/hooks/useAdmin';
+import { WorkflowStep, WorkflowTemplate } from '@/hooks/useAdmin';
 import { cn } from '@/lib/utils';
 import {
     Play,
@@ -9,9 +9,7 @@ import {
     User,
     Users,
     Building2,
-    FileText,
-    XCircle,
-    ArrowDown
+    FileText
 } from 'lucide-react';
 
 interface WorkflowFlowViewProps {
@@ -81,7 +79,7 @@ export function WorkflowFlowView({ template }: WorkflowFlowViewProps) {
                 isPositive,
                 offset: (idx % 3 - 1) * 25
             };
-        }).filter(c => c !== null) as any[];
+        }).filter(c => c !== null);
 
         return { rows, connections, nodePositions, viewWidth, totalHeight: rows.length * rowHeight + 200 };
     }, [steps, transitions]);
@@ -135,7 +133,6 @@ export function WorkflowFlowView({ template }: WorkflowFlowViewProps) {
                             } else {
                                 // Loop around for backwards transition
                                 const loopX = startX + 180 + conn.offset;
-                                const midY = endY + (startY - endY) / 2;
                                 d = `M ${startX + 100} ${startY - 40} L ${loopX} ${startY - 40} L ${loopX} ${endY + 20} L ${endX + 100} ${endY + 20}`;
                             }
 

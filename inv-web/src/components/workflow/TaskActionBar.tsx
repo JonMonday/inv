@@ -1,65 +1,58 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTasks } from '@/hooks/useTasks';
-import { useRequests, useUpdateRequest } from '@/hooks/useRequests';
+import { useUpdateRequest } from '@/hooks/useRequests';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import {
     CheckCircle2,
     Loader2,
     Package,
     XCircle,
-    Send,
-    Save,
-    ClipboardCheck,
     ChevronRight
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface TaskActionBarProps {
-    task: any;
-    request: any;
+    task: {
+        id: number;
+        stepKey: string;
+        stepName: string;
+        claimedByUserId?: number | null;
+    };
+    request: {
+        requestId: number;
+        requestTypeId: number;
+        warehouseId: number;
+        departmentId: number;
+        notes?: string;
+        workflowTemplateId: number;
+        lines: { productId: number, qtyRequested: number }[];
+    };
 }
 
 export function TaskActionBar({ task, request }: TaskActionBarProps) {
-    const { actionMutation, claimMutation } = useTasks();
+    const { actionMutation } = useTasks();
     const updateRequestMutation = useUpdateRequest();
     const { toast } = useToast();
-    const [notes, setNotes] = useState('');
-
+    const [notes] = useState('');
     const isFulfillmentStep = task.stepKey === 'FULFILL' || task.stepKey === 'FULFILLMENT' || task.stepName === 'Fulfillment';
     const isStartStep = task.stepKey === 'START' || task.stepKey === 'SUBMISSION';
     const isConfirmationStep = task.stepKey === 'CONFIRMATION' || task.stepKey === 'CONFIRM';
 
-    const needsClaim = !task.claimedByUserId && !isStartStep && !isConfirmationStep;
-
-    const handleClaim = async () => {
-        try {
-            await claimMutation.mutateAsync(task.id);
-            toast({ title: 'Task claimed successfully' });
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Failed to claim task' });
-        }
-    };
-
-    const handleAction = async (action: 'APPROVE' | 'REJECT' | 'COMPLETE' | 'SUBMIT') => {
+    const handleAction = async (action: 'APPROVE' | 'REJECT' | 'COMPLETE' | 'SUBMIT' | 'CANCEL') => {
         try {
             await actionMutation.mutateAsync({
                 taskId: task.id,
-                action: action as any,
+                action: action as 'APPROVE' | 'REJECT' | 'CANCEL' | 'COMPLETE',
                 notes,
                 payloadJson: "{}"
             });
             toast({ title: `Action processed successfully` });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const err = error as { message?: string };
             toast({
                 variant: 'destructive',
                 title: `Action failed`,
-                description: error.message || 'Unknown error'
+                description: err.message || 'Unknown error'
             });
         }
     };
@@ -73,7 +66,7 @@ export function TaskActionBar({ task, request }: TaskActionBarProps) {
                 departmentId: request.departmentId,
                 notes: request.notes,
                 workflowTemplateId: request.workflowTemplateId,
-                lines: (request.lines || []).map((l: any) => ({
+                lines: (request.lines || []).map((l: { productId: number, qtyRequested: number }) => ({
                     productId: l.productId,
                     quantity: l.qtyRequested
                 }))
@@ -84,11 +77,12 @@ export function TaskActionBar({ task, request }: TaskActionBarProps) {
                 data: dto
             });
             toast({ title: 'Draft saved successfully' });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const err = error as { message?: string };
             toast({
                 variant: 'destructive',
                 title: 'Failed to save draft',
-                description: error.message || 'Unknown error'
+                description: err.message || 'Unknown error'
             });
         }
     };

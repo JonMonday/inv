@@ -45,7 +45,7 @@ export function useStockLevels(warehouseId?: number, productId?: number) {
 }
 
 export function useUnitsOfMeasure(request: PagedRequest = { pageNumber: 1, pageSize: 100 }) {
-    return useQuery<PagedResponse<any[]>>({
+    return useQuery<PagedResponse<unknown[]>>({
         queryKey: ['reference', 'units-of-measure', request],
         queryFn: async () => {
             const response = await apiClient.get('/api/reference/units-of-measure', { params: request });
@@ -54,21 +54,31 @@ export function useUnitsOfMeasure(request: PagedRequest = { pageNumber: 1, pageS
     });
 }
 
-export function useMovementTypes(request: PagedRequest = { pageNumber: 1, pageSize: 100 }) {
-    return useQuery<PagedResponse<unknown[]>>({
-        queryKey: ['reference', 'movement-types', request],
+export const useMovementTypes = () => {
+    return useQuery({
+        queryKey: ['reference', 'movement-types'],
         queryFn: async () => {
-            const response = await apiClient.get('/api/reference/inventory-movement-type', { params: request });
+            const response = await apiClient.get('/api/reference/inventory-movement-type', { params: { pageSize: 100 } });
             return response.data;
         },
     });
-}
+};
+
+export const useReasonCodes = () => {
+    return useQuery({
+        queryKey: ['reference', 'reason-codes'],
+        queryFn: async () => {
+            const response = await apiClient.get('/api/reference/inventory-reason-code', { params: { pageSize: 100 } });
+            return response.data;
+        },
+    });
+};
 
 export function usePostMovement() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (data: any) => {
-            return await apiClient.post('/api/stock/post', data);
+        mutationFn: async (data: Record<string, unknown>) => {
+            return await apiClient.post('/api/stock/movements', data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['inventory', 'levels'] });

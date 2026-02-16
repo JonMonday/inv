@@ -71,13 +71,16 @@ public class StockController : ControllerBase
             .Include(m => m.CreatedByUser)
             .Include(m => m.MovementType)
             .Include(m => m.ReferenceRequest)
-            .Include(m => m.ReferenceReservation)
+            .Include(m => m.ReasonCode)
             .OrderByDescending(m => m.CreatedAt)
             .Select(m => new {
                 m.StockMovementId,
                 RequestNo = m.ReferenceRequest != null ? m.ReferenceRequest.RequestNo : null,
                 ReferenceNo = m.ReferenceReservation != null ? m.ReferenceReservation.ReservationNo : null,
                 MovementTypeCode = m.MovementType.Code,
+                ReasonCode = m.ReasonCode != null ? m.ReasonCode.Code : null,
+                ReasonName = m.ReasonCode != null ? m.ReasonCode.Name : null,
+                m.Notes,
                 m.WarehouseId,
                 PerformedBy = m.CreatedByUser.Username,
                 m.CreatedAt,

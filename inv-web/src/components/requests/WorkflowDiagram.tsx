@@ -30,25 +30,33 @@ interface WorkflowDiagramProps {
     transitions: Transition[];
 }
 
+import { useTheme } from 'next-themes';
+
 export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({ steps, transitions }) => {
     const mermaidRef = useRef<HTMLDivElement>(null);
+    const { resolvedTheme } = useTheme();
 
     useEffect(() => {
+        const isDark = resolvedTheme === 'dark';
+
         mermaid.initialize({
             startOnLoad: true,
             theme: 'base',
             themeVariables: {
-                primaryColor: '#0f172a',
-                primaryTextColor: '#fff',
-                primaryBorderColor: '#0f172a',
-                lineColor: '#64748b',
-                secondaryColor: '#f8fafc',
-                tertiaryColor: '#fff',
+                primaryColor: isDark ? '#1e293b' : '#ffffff',
+                primaryTextColor: isDark ? '#f8fafc' : '#0f172a',
+                primaryBorderColor: isDark ? '#334155' : '#0f172a',
+                lineColor: isDark ? '#94a3b8' : '#64748b',
+                secondaryColor: isDark ? '#334155' : '#f8fafc',
+                tertiaryColor: isDark ? '#1e293b' : '#fff',
             },
             securityLevel: 'loose',
-            fontFamily: 'Inter, sans-serif'
+            fontFamily: 'Inter, sans-serif',
+            flowchart: {
+                curve: 'basis' // Match builder curve
+            }
         });
-    }, []);
+    }, [resolvedTheme]);
 
     useEffect(() => {
         if (mermaidRef.current && steps.length > 0) {
@@ -76,15 +84,38 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({ steps, transit
                 }
             }
         }
-    }, [steps, transitions]);
+    }, [steps, transitions, resolvedTheme]);
 
     const generateMermaidDefinition = (steps: Step[], transitions: Transition[]) => {
-        let def = 'graph TD\n';
+        const isDark = resolvedTheme === 'dark';
 
-        // Styling classes
-        def += 'classDef completed fill:#0f172a,stroke:#0f172a,color:#fff,stroke-width:2px;\n';
-        def += 'classDef active fill:#f1f5f9,stroke:#0f172a,color:#0f172a,stroke-width:3px;\n';
-        def += 'classDef pending fill:#fff,stroke:#e2e8f0,color:#64748b,stroke-width:1px,stroke-dasharray: 5 5;\n';
+        // Define colors based on theme
+        const colors = {
+            completed: {
+                fill: isDark ? '#052e16' : '#0f172a', // Dark green/slate to match builder Start style? Or keep dark blue? Request diagram had dark blue.
+                // Let's keep dark blue for completed as per original
+                stroke: isDark ? '#1e293b' : '#0f172a',
+                color: '#fff'
+            },
+            active: {
+                fill: isDark ? '#1e293b' : '#f1f5f9',
+                stroke: isDark ? '#94a3b8' : '#0f172a',
+                color: isDark ? '#f8fafc' : '#0f172a'
+            },
+            pending: {
+                fill: isDark ? '#0f172a' : '#fff', // Dark bg for pending
+                stroke: isDark ? '#334155' : '#e2e8f0',
+                color: isDark ? '#94a3b8' : '#64748b'
+            }
+        };
+
+        const defLines = [
+            'graph TD',
+            // Use array join method here too for safety
+            `classDef completed fill:${colors.completed.fill},stroke:${colors.completed.stroke},color:${colors.completed.color},stroke-width:2px,rx:5px,ry:5px;`,
+            `classDef active fill:${colors.active.fill},stroke:${colors.active.stroke},color:${colors.active.color},stroke-width:2px,rx:5px,ry:5px;`, // Updated width 3->2 to match
+            `classDef pending fill:${colors.pending.fill},stroke:${colors.pending.stroke},color:${colors.pending.color},stroke-width:1px,stroke-dasharray: 5 5,rx:5px,ry:5px;`
+        ];
 
         steps.forEach(step => {
             const isDone = step.status === 'COMPLETED';
@@ -100,23 +131,23 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({ steps, transit
                 if (ruleParts.length > 0) label += `<br/><small>${ruleParts.join(' | ')}</small>`;
             }
 
-            def += `  Step${step.workflowStepId}("${label}")\n`;
+            defLines.push(`  Step${step.workflowStepId}("${label}")`);
 
             if (isDone) {
-                def += `  class Step${step.workflowStepId} completed\n`;
+                defLines.push(`  class Step${step.workflowStepId} completed`);
             } else if (isActive) {
-                def += `  class Step${step.workflowStepId} active\n`;
+                defLines.push(`  class Step${step.workflowStepId} active`);
             } else {
-                def += `  class Step${step.workflowStepId} pending\n`;
+                defLines.push(`  class Step${step.workflowStepId} pending`);
             }
         });
 
         transitions.forEach(t => {
             const safeAction = t.actionType.replace(/"/g, "'");
-            def += `  Step${t.fromWorkflowStepId} -->|"${safeAction}"| Step${t.toWorkflowStepId}\n`;
+            defLines.push(`  Step${t.fromWorkflowStepId} -->|"${safeAction}"| Step${t.toWorkflowStepId}`);
         });
 
-        return def;
+        return defLines.join('\n');
     };
 
     if (steps.length === 0) {

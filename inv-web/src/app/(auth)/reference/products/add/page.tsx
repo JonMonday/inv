@@ -29,10 +29,10 @@ export default function ProductAddPage() {
     const router = useRouter();
     const { toast } = useToast();
     const createProduct = useCreateProduct();
-    const { data: categoriesResponse, isLoading: loadingCategories } = useCategories();
+    const { data: categoriesResponse } = useCategories();
     const categories = Array.isArray(categoriesResponse?.data) ? categoriesResponse.data : [];
 
-    const { data: uomResponse, isLoading: loadingUoms } = useUnitsOfMeasure();
+    const { data: uomResponse } = useUnitsOfMeasure();
     const unitsOfMeasure = Array.isArray(uomResponse?.data) ? uomResponse.data : [];
 
     const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<ProductFormValues>({
@@ -60,10 +60,11 @@ export default function ProductAddPage() {
                 description: "The product has been successfully created."
             });
             router.push('/reference/products');
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
             toast({
                 title: "Error",
-                description: error.response?.data?.message || 'Failed to create product',
+                description: err.response?.data?.message || 'Failed to create product',
                 variant: "destructive"
             });
         }
@@ -109,7 +110,7 @@ export default function ProductAddPage() {
                                         <SelectValue placeholder="Select unit" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {unitsOfMeasure.map((uom: any) => (
+                                        {(unitsOfMeasure as { id: number, name: string, code: string }[]).map((uom) => (
                                             <SelectItem key={uom.id} value={uom.id.toString()}>
                                                 {uom.name} ({uom.code})
                                             </SelectItem>
@@ -138,7 +139,7 @@ export default function ProductAddPage() {
                                     <SelectValue placeholder="Select a category" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {categories.map((cat: any) => (
+                                    {(categories as { id: number, name: string }[]).map((cat) => (
                                         <SelectItem key={cat.id} value={cat.id.toString()}>
                                             {cat.name}
                                         </SelectItem>

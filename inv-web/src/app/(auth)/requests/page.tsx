@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRequests } from '@/hooks/useRequests';
 import { PaginationControls } from '@/components/ui/pagination-controls';
@@ -54,12 +54,12 @@ export default function RequestsPage() {
     const totalPages = data?.totalPages || 0;
     const totalRecords = data?.totalRecords || 0;
 
-    const debouncedSearch = useCallback(
-        debounce((term: string) => {
+    const debouncedSearch = useMemo(
+        () => debounce((term: string) => {
             setSearchTerm(term);
             setPage(1);
         }, 500),
-        []
+        [setSearchTerm, setPage]
     );
 
     return (

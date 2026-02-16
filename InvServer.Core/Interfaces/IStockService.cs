@@ -14,6 +14,7 @@ public class StockMovementRequest
     public long? ReservationId { get; set; }
     public long UserId { get; set; }
     public string? Notes { get; set; }
+    public long? ToWarehouseId { get; set; } // For Transfer movements
     public List<StockMovementLineRequest> Lines { get; set; } = new();
 }
 

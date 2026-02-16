@@ -73,6 +73,124 @@ public class StockService : IStockService
             if (movementType == null)
                 throw new InvalidOperationException($"Movement Type Code '{request.MovementTypeCode}' not found.");
             
+            // SPECIAL HANDLING FOR TRANSFER
+            if (request.MovementTypeCode == MovementTypeCodes.Transfer)
+            {
+                if (!request.ToWarehouseId.HasValue)
+                    throw new InvalidOperationException("ToWarehouseId is required for Transfer movements.");
+
+                if (request.ToWarehouseId == request.WarehouseId)
+                    throw new InvalidOperationException("Cannot transfer to the same warehouse.");
+
+                // Create Outbound Movement (Source)
+                var outRequest = new StockMovementRequest
+                {
+                    MovementTypeCode = MovementTypeCodes.TransferOut,
+                    WarehouseId = request.WarehouseId,
+                    ReasonCode = request.ReasonCode,
+                    UserId = request.UserId,
+                    Notes = $"Transfer Out to Warehouse {request.ToWarehouseId}. {request.Notes}",
+                    Lines = request.Lines.Select(l => new StockMovementLineRequest
+                    {
+                        ProductId = l.ProductId,
+                        QtyDeltaOnHand = -Math.Abs(l.QtyDeltaOnHand), // Ensure negative
+                        QtyDeltaReserved = 0, // Transfers affect OnHand typically
+                        UnitCost = l.UnitCost,
+                        LineNotes = l.LineNotes
+                    }).ToList()
+                };
+
+                // Create Inbound Movement (Dest)
+                var inRequest = new StockMovementRequest
+                {
+                    MovementTypeCode = MovementTypeCodes.TransferIn,
+                    WarehouseId = request.ToWarehouseId.Value,
+                    ReasonCode = request.ReasonCode,
+                    UserId = request.UserId,
+                    Notes = $"Transfer In from Warehouse {request.WarehouseId}. {request.Notes}",
+                    Lines = request.Lines.Select(l => new StockMovementLineRequest
+                    {
+                        ProductId = l.ProductId,
+                        QtyDeltaOnHand = Math.Abs(l.QtyDeltaOnHand), // Ensure positive
+                        QtyDeltaReserved = 0,
+                        UnitCost = l.UnitCost,
+                        LineNotes = l.LineNotes
+                    }).ToList()
+                };
+
+                // Recursively call PostMovementAsync (but passing null for idempotency to avoid loop issues, or we handle manual DB calls here to stay in same transaction?)
+                // Since this method is transactional, calling itself safely requires passing the EXISTING transaction?
+                // EF Core uses ambient transactions or we can just duplicate logic?
+                // Recursive call implies new transaction `BeginTransactionAsync`. Nested transactions are not supported by all providers or EF nicely.
+                // BETTER APPROACH: Refactor the core movement logic to a private method that takes the DbContext/Transaction context, or just implement specific logic here.
+                
+                // Let's implement the dual movement creation manually here to respect the SINGLE transaction we already started.
+                
+                // --- OUTBOUND ---
+                var outType = await _db.InventoryMovementTypes.FirstAsync(t => t.Code == MovementTypeCodes.TransferOut);
+                var postedStatus = await _db.InventoryMovementStatuses.FirstAsync(s => s.Code == MovementStatusCodes.Posted);
+                long? reasonId = null;
+                if (!string.IsNullOrEmpty(request.ReasonCode))
+                {
+                    var r = await _db.InventoryReasonCodes.FirstOrDefaultAsync(rc => rc.Code == request.ReasonCode);
+                    if (r != null) reasonId = r.ReasonCodeId;
+                }
+
+                var moveOut = new StockMovement
+                {
+                    MovementTypeId = outType.MovementTypeId,
+                    MovementStatusId = postedStatus.MovementStatusId,
+                    ReasonCodeId = reasonId,
+                    WarehouseId = request.WarehouseId,
+                    CreatedByUserId = request.UserId,
+                    PostedByUserId = request.UserId,
+                    CreatedAt = DateTime.UtcNow,
+                    PostedAt = DateTime.UtcNow,
+                    Notes = outRequest.Notes
+                };
+                _db.StockMovements.Add(moveOut);
+                await _db.SaveChangesAsync();
+
+                foreach (var line in outRequest.Lines)
+                {
+                    _db.StockMovementLines.Add(new StockMovementLine { StockMovementId = moveOut.StockMovementId, ProductId = line.ProductId, QtyDeltaOnHand = line.QtyDeltaOnHand, UnitCost = line.UnitCost, LineNotes = line.LineNotes });
+                    await _db.Database.ExecuteSqlRawAsync("CALL sp_UpdateStockQuantity({0}, {1}, {2}, {3})", line.ProductId, outRequest.WarehouseId, line.QtyDeltaOnHand, 0);
+                    // Validate Source Stock
+                    var sl = await _db.StockLevels.AsNoTracking().FirstAsync(s => s.WarehouseId == outRequest.WarehouseId && s.ProductId == line.ProductId);
+                    if (sl.OnHandQty < 0) throw new InvalidOperationException($"Insufficient stock for transfer of Product {line.ProductId} at Source.");
+                }
+
+                // --- INBOUND ---
+                var inType = await _db.InventoryMovementTypes.FirstAsync(t => t.Code == MovementTypeCodes.TransferIn);
+                var moveIn = new StockMovement
+                {
+                    MovementTypeId = inType.MovementTypeId,
+                    MovementStatusId = postedStatus.MovementStatusId,
+                    ReasonCodeId = reasonId,
+                    WarehouseId = inRequest.WarehouseId,
+                    CreatedByUserId = request.UserId,
+                    PostedByUserId = request.UserId,
+                    CreatedAt = DateTime.UtcNow,
+                    PostedAt = DateTime.UtcNow,
+                    Notes = inRequest.Notes,
+                    ReversedMovementId = moveOut.StockMovementId // Link them logicially? Or adding a new LinkTable? StockMovement has ReversedMovementId but that implies reversal.
+                    // For now, we just log them.
+                };
+                _db.StockMovements.Add(moveIn);
+                await _db.SaveChangesAsync();
+
+                foreach (var line in inRequest.Lines)
+                {
+                    _db.StockMovementLines.Add(new StockMovementLine { StockMovementId = moveIn.StockMovementId, ProductId = line.ProductId, QtyDeltaOnHand = line.QtyDeltaOnHand, UnitCost = line.UnitCost, LineNotes = line.LineNotes });
+                    await _db.Database.ExecuteSqlRawAsync("CALL sp_UpdateStockQuantity({0}, {1}, {2}, {3})", line.ProductId, inRequest.WarehouseId, line.QtyDeltaOnHand, 0);
+                }
+
+                await _db.SaveChangesAsync(); // <-- Fix: Persist lines for TRANSFER_IN
+
+                await transaction.CommitAsync();
+                return moveOut.StockMovementId; // Return Source Movement ID
+            }
+
             var movementStatus = await _db.InventoryMovementStatuses.FirstOrDefaultAsync(s => s.Code == MovementStatusCodes.Posted);
             if (movementStatus == null)
                 throw new InvalidOperationException($"Movement Status Code '{MovementStatusCodes.Posted}' not found.");
@@ -113,7 +231,7 @@ public class StockService : IStockService
                         .ThenInclude(i => i.CurrentStep)
                             .ThenInclude(s => s.StepType)
                     .Where(r => r.RequestId == request.RequestId)
-                    .Select(r => r.WorkflowInstance.CurrentStep != null && r.WorkflowInstance.CurrentStep.StepType.Code == WorkflowStepTypeCodes.Fulfillment)
+                    .Select(r => r.WorkflowInstance != null && r.WorkflowInstance.CurrentStep != null && r.WorkflowInstance.CurrentStep.StepType.Code == WorkflowStepTypeCodes.Fulfillment)
                     .FirstOrDefaultAsync();
 
                 if (!isValid)
@@ -134,37 +252,20 @@ public class StockService : IStockService
                 };
                 _db.StockMovementLines.Add(movementLine);
 
-                // 6. SQL SERVER LOCK: Stock Level Row
-                // Use Raw SQL for UPDLOCK, HOLDLOCK to ensure serializable-like isolation on the specifically affected row.
+                // 6. Use Stored Procedure for Stock Update
+                await _db.Database.ExecuteSqlRawAsync(
+                    "CALL sp_UpdateStockQuantity({0}, {1}, {2}, {3})",
+                    lineReq.ProductId,
+                    request.WarehouseId,
+                    lineReq.QtyDeltaOnHand,
+                    lineReq.QtyDeltaReserved
+                );
+
+                // 7. Validate Invariants (Post-Update Check)
+                // We fetch the updated record within the transaction to ensure validity.
                 var stockLevel = await _db.StockLevels
-                    .FirstOrDefaultAsync(s => s.WarehouseId == request.WarehouseId && s.ProductId == lineReq.ProductId);
-
-                if (stockLevel == null)
-                {
-                    stockLevel = new StockLevel
-                    {
-                        WarehouseId = request.WarehouseId,
-                        ProductId = lineReq.ProductId,
-                        OnHandQty = 0,
-                        ReservedQty = 0,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    _db.StockLevels.Add(stockLevel);
-                    // To prevent race conditions on initial creation of a StockLevel row, we attempt a save here.
-                    // If it fails, another process won the race and we'll re-query with lock.
-                    try {
-                        await _db.SaveChangesAsync();
-                    } catch (DbUpdateException) {
-                        _db.Entry(stockLevel).State = EntityState.Detached;
-                        stockLevel = await _db.StockLevels
-                            .FirstAsync(s => s.WarehouseId == request.WarehouseId && s.ProductId == lineReq.ProductId);
-                    }
-                }
-
-                // 7. Update Quantities and Validate Invariants
-                stockLevel.OnHandQty += lineReq.QtyDeltaOnHand;
-                stockLevel.ReservedQty += lineReq.QtyDeltaReserved;
-                stockLevel.UpdatedAt = DateTime.UtcNow;
+                    .AsNoTracking()
+                    .FirstAsync(s => s.WarehouseId == request.WarehouseId && s.ProductId == lineReq.ProductId);
 
                 if (stockLevel.OnHandQty < 0)
                     throw new InvalidOperationException($"Insufficient on-hand stock for Product {lineReq.ProductId}.");

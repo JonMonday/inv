@@ -22,9 +22,8 @@ import {
     SelectValue
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Search, Loader2, AlertCircle, FilePlus2, ChevronRight, CheckCircle2, ArrowLeft, ClipboardList, Package, FileText, Banknote, UserCheck, ShieldCheck, Workflow, Plus, Calendar } from 'lucide-react';
+import { Trash2, Search, Loader2, ChevronRight, CheckCircle2, ArrowLeft, ClipboardList, Package, Banknote, ShieldCheck, Workflow, Plus, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { WorkflowAssignmentsCard } from '@/components/requests/WorkflowAssignmentsCard';
 import { Separator } from '@/components/ui/separator';
 
 type Phase = 'selection' | 'form' | 'success';
@@ -59,7 +58,7 @@ export default function NewRequestPage() {
 
     const [phase, setPhase] = useState<Phase>('selection');
     const [templateSearch, setTemplateSearch] = useState('');
-    const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+    const [selectedTemplate, setSelectedTemplate] = useState<{ workflowTemplateId: number, name: string } | null>(null);
     const [submittedRequestId, setSubmittedRequestId] = useState<number | null>(null);
 
     const [productSearch, setProductSearch] = useState('');
@@ -82,7 +81,7 @@ export default function NewRequestPage() {
     });
 
     const workflowTemplateId = form.watch('workflowTemplateId');
-    const { data: assignmentOptions, isLoading: isLoadingAssignments } = useAssignmentOptions(workflowTemplateId || null);
+    const { data: assignmentOptions } = useAssignmentOptions(workflowTemplateId || null);
 
     const { fields, append, remove } = useFieldArray({
         control: form.control,
@@ -166,7 +165,7 @@ export default function NewRequestPage() {
         setIsSubmitting(true);
         try {
             // Ensure template ID is set if it was selected in Phase 1
-            const finalValues = { ...values, workflowTemplateId: selectedTemplate.workflowTemplateId };
+            const finalValues = { ...values, workflowTemplateId: selectedTemplate?.workflowTemplateId || values.workflowTemplateId };
 
             const response = await createMutation.mutateAsync(finalValues);
             const requestId = response.data;
@@ -192,8 +191,9 @@ export default function NewRequestPage() {
                 toast({ title: 'Draft saved successfully' });
                 // We stay on the page as requested
             }
-        } catch (error: any) {
-            const message = error.response?.data?.message || error.message || 'Unknown error';
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } }, message?: string };
+            const message = err.response?.data?.message || err.message || 'Unknown error';
             toast({
                 variant: 'destructive',
                 title: 'Operation Failed',
@@ -223,7 +223,7 @@ export default function NewRequestPage() {
     }, [assignmentOptions, manualAssignments]);
 
     if (phase === 'selection') {
-        const filteredTemplates = templates?.data?.filter((t: any) =>
+        const filteredTemplates = (templates?.data as { workflowTemplateId: number, name: string, description?: string }[] | undefined)?.filter((t) =>
             t.name.toLowerCase().includes(templateSearch.toLowerCase())
         ) || [];
 
@@ -255,7 +255,7 @@ export default function NewRequestPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredTemplates.map((t: any) => {
+                    {filteredTemplates.map((t) => {
                         const Icon = getIcon(t.name);
                         return (
                             <Card
@@ -388,7 +388,7 @@ export default function NewRequestPage() {
                                 <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Department</label>
                                 <div className="h-10 px-3 flex items-center bg-muted/30 border rounded-md font-medium text-sm">
                                     {(() => {
-                                        const dept = departments?.find((d: any) => d.departmentId === user?.primaryDepartmentId);
+                                        const dept = (departments as { departmentId: number, name: string }[] | undefined)?.find((d) => d.departmentId === user?.primaryDepartmentId);
                                         return dept ? `${dept.name}` : user?.departments?.[0] || 'No Department Assigned';
                                     })()}
                                 </div>

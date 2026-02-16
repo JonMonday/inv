@@ -163,17 +163,6 @@ public class WorkflowEngine : IWorkflowEngine
         if (task.WorkflowTaskStatus.IsTerminal)
             throw new InvalidOperationException("Task is already terminal.");
 
-        // cancellation rule: requestor only, and only at submission step (sequence 0)
-        if (actionCode == WorkflowActionCodes.Cancel)
-        {
-            if (task.WorkflowInstance.InitiatorUserId != userId)
-                throw new UnauthorizedAccessException("Only the requestor can cancel.");
-
-            var stepSeq = await _db.WorkflowSteps.Where(s => s.WorkflowStepId == task.WorkflowStepId).Select(s => s.SequenceNo).FirstAsync();
-            if (stepSeq != 0)
-                throw new InvalidOperationException("Cancellation is only allowed at the submission step.");
-        }
-
         // assignee/claimer enforcement
         if (task.ClaimedByUserId != null && task.ClaimedByUserId != userId)
             throw new InvalidOperationException("Task is already claimed by another user.");
@@ -265,21 +254,6 @@ public class WorkflowEngine : IWorkflowEngine
             return;
         }
 
-        if (actionCode == WorkflowActionCodes.Reject)
-        {
-            // per your rule: rejection ALWAYS goes back to submission (lowest sequence)
-            var submissionStepId = await _db.WorkflowSteps
-                .Where(s => s.WorkflowTemplateId == task.WorkflowInstance.WorkflowTemplateId && s.IsActive)
-                .OrderBy(s => s.SequenceNo)
-                .Select(s => s.WorkflowStepId)
-                .FirstAsync();
-
-            task.WorkflowInstance.CurrentWorkflowStepId = submissionStepId;
-
-            await CreateTaskForStepAsync(task.WorkflowInstanceId, submissionStepId, task.WorkflowInstance.InitiatorUserId);
-            await _db.SaveChangesAsync();
-            return;
-        }
 
         // normal transition (Approve/Submit/Complete/etc)
         var transition = await _db.WorkflowTransitions

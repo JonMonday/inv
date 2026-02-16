@@ -81,7 +81,7 @@ export default function ParticipatedRequestsPage() {
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            requests.map((req: any) => (
+                            (requests as { requestId: number, warehouseName: string, statusLabel: string, requestedAt: string }[]).map((req) => (
                                 <TableRow key={req.requestId} className="group">
                                     <TableCell className="font-mono text-xs font-bold">REQ-{req.requestId}</TableCell>
                                     <TableCell className="text-sm font-medium">{req.warehouseName}</TableCell>

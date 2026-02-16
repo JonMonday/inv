@@ -21,7 +21,7 @@ import {
     ArrowRight
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useState, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { debounce } from 'lodash';
 import {
@@ -42,12 +42,12 @@ export default function AuditLogsPage() {
     const totalPages = logsData?.totalPages || 0;
     const totalRecords = logsData?.totalRecords || 0;
 
-    const debouncedSearch = useCallback(
-        debounce((term: string) => {
+    const debouncedSearch = useMemo(
+        () => debounce((term: string) => {
             setSearchTerm(term);
             setPage(1);
         }, 500),
-        []
+        [setSearchTerm, setPage]
     );
 
     const formatJson = (json: string) => {

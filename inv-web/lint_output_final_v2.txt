@@ -1,0 +1,59 @@
+
+> inv-web@0.1.0 lint
+> next lint
+
+
+./src/app/(auth)/admin/permissions/page.tsx
+30:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/admin/roles/page.tsx
+37:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/admin/users/page.tsx
+84:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/admin/workflows/page.tsx
+110:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/audit/page.tsx
+45:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/inventory/levels/movement/page.tsx
+28:5  Error: 'Plus' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/inventory/movements/page.tsx
+65:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/reference/products/page.tsx
+56:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/requests/[id]/page.tsx
+19:5  Error: 'Trash2' is defined but never used.  @typescript-eslint/no-unused-vars
+20:5  Error: 'Search' is defined but never used.  @typescript-eslint/no-unused-vars
+21:5  Error: 'ChevronRight' is defined but never used.  @typescript-eslint/no-unused-vars
+22:5  Error: 'Package' is defined but never used.  @typescript-eslint/no-unused-vars
+23:5  Error: 'Banknote' is defined but never used.  @typescript-eslint/no-unused-vars
+24:5  Error: 'Plus' is defined but never used.  @typescript-eslint/no-unused-vars
+50:10  Error: 'Textarea' is defined but never used.  @typescript-eslint/no-unused-vars
+58:13  Error: 'user' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/requests/new/page.tsx
+25:108  Error: 'UserCheck' is defined but never used.  @typescript-eslint/no-unused-vars
+84:49  Error: 'isLoadingAssignments' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/requests/page.tsx
+57:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/components/layout/app-shell.tsx
+43:15  Error: 'segments' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/layout/sidebar.tsx
+19:5  Error: 'Menu' is defined but never used.  @typescript-eslint/no-unused-vars
+20:5  Error: 'X' is defined but never used.  @typescript-eslint/no-unused-vars
+21:5  Error: 'ChevronDown' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/workflow/TaskActionBar.tsx
+45:35  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+69:54  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules

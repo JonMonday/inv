@@ -26,7 +26,7 @@ export default function CategoryAddPage() {
     const router = useRouter();
     const { toast } = useToast();
     const createCategory = useCreateCategory();
-    const { data: categoriesResponse, isLoading: loadingCategories } = useCategories();
+    const { data: categoriesResponse } = useCategories();
     const categories = Array.isArray(categoriesResponse?.data) ? categoriesResponse.data : [];
 
     const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<CategoryFormValues>({
@@ -48,10 +48,11 @@ export default function CategoryAddPage() {
                 description: "The category has been successfully created."
             });
             router.push('/reference/categories');
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
             toast({
                 title: "Error",
-                description: error.response?.data?.message || 'Failed to create category',
+                description: err.response?.data?.message || 'Failed to create category',
                 variant: "destructive"
             });
         }
@@ -97,7 +98,7 @@ export default function CategoryAddPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">None (Root Category)</SelectItem>
-                                    {categories.map((cat: any) => (
+                                    {(categories as { id: number, name: string }[]).map((cat) => (
                                         <SelectItem key={cat.id} value={cat.id.toString()}>
                                             {cat.name}
                                         </SelectItem>

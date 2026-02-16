@@ -27,6 +27,14 @@ public class WorkflowTemplate
 
     public bool IsActive { get; set; } = true;
 
+    public long? DepartmentId { get; set; }
+    [ForeignKey(nameof(DepartmentId))]
+    public Department? Department { get; set; }
+
+    public long? RejectionModeId { get; set; }
+    [ForeignKey(nameof(RejectionModeId))]
+    public RejectionMode? RejectionMode { get; set; }
+
     public long? SourceTemplateId { get; set; }
     [ForeignKey(nameof(SourceTemplateId))]
     public WorkflowTemplate? SourceTemplate { get; set; }

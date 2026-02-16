@@ -11,7 +11,6 @@ import {
     TableHeader,
     TableRow
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { FileText, Search, Filter, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -79,7 +78,7 @@ export default function DraftRequestsPage() {
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            requests.map((req: any) => (
+                            (requests as { requestId: number, warehouseName: string, requestedAt: string }[]).map((req) => (
                                 <TableRow key={req.requestId} className="group">
                                     <TableCell className="font-mono text-xs font-bold">REQ-{req.requestId}</TableCell>
                                     <TableCell className="text-sm font-medium">{req.warehouseName}</TableCell>

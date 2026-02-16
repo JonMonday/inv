@@ -6,10 +6,6 @@ import {
     Moon,
     User,
     LogOut,
-    LayoutList,
-    Kanban,
-    Calendar,
-    BarChart2,
     Bell,
     ChevronRight
 } from 'lucide-react';
@@ -24,7 +20,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuthStore } from '@/store/authStore';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 

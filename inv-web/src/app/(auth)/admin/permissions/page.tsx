@@ -4,7 +4,7 @@ import { Lock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { usePermissions } from '@/hooks/useAdmin';
-import { useState, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
@@ -27,12 +27,12 @@ export default function PermissionsPage() {
     const totalPages = permissionsData?.totalPages || 0;
     const totalRecords = permissionsData?.totalRecords || 0;
 
-    const debouncedSearch = useCallback(
-        debounce((term: string) => {
+    const debouncedSearch = useMemo(
+        () => debounce((term: string) => {
             setSearchTerm(term);
             setPage(1);
         }, 500),
-        []
+        [setSearchTerm, setPage]
     );
 
     if (isLoading && !permissionsData) {

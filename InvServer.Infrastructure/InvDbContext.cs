@@ -52,6 +52,7 @@ public class InvDbContext : DbContext
     public DbSet<WorkflowAssignmentMode> WorkflowAssignmentModes => Set<WorkflowAssignmentMode>();
     public DbSet<WorkflowConditionOperator> WorkflowConditionOperators => Set<WorkflowConditionOperator>();
     public DbSet<SecurityEventType> SecurityEventTypes => Set<SecurityEventType>();
+    public DbSet<RejectionMode> RejectionModes => Set<RejectionMode>();
 
     public DbSet<WorkflowTemplate> WorkflowTemplates => Set<WorkflowTemplate>();
 
@@ -62,6 +63,7 @@ public class InvDbContext : DbContext
         // RBAC unique constraints
         modelBuilder.Entity<Permission>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<Role>().HasIndex(x => x.Name).IsUnique();
+        modelBuilder.Entity<RejectionMode>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<User>().HasIndex(x => x.Username).IsUnique();
         modelBuilder.Entity<User>().HasIndex(x => x.Email).IsUnique();
 

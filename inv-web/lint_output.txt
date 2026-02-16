@@ -1,0 +1,175 @@
+
+> inv-web@0.1.0 lint
+> next lint
+
+
+./src/app/(auth)/admin/permissions/page.tsx
+30:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/admin/roles/page.tsx
+37:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/admin/users/page.tsx
+84:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/admin/workflows/page.tsx
+9:32  Error: 'Settings2' is defined but never used.  @typescript-eslint/no-unused-vars
+9:43  Error: 'History' is defined but never used.  @typescript-eslint/no-unused-vars
+9:84  Error: 'MoreHorizontal' is defined but never used.  @typescript-eslint/no-unused-vars
+110:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/audit/page.tsx
+45:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/inventory/levels/movement/page.tsx
+14:29  Error: 'CardDescription' is defined but never used.  @typescript-eslint/no-unused-vars
+28:5  Error: 'Plus' is defined but never used.  @typescript-eslint/no-unused-vars
+31:5  Error: 'ChevronRight' is defined but never used.  @typescript-eslint/no-unused-vars
+36:10  Error: 'Badge' is defined but never used.  @typescript-eslint/no-unused-vars
+37:10  Error: 'Separator' is defined but never used.  @typescript-eslint/no-unused-vars
+85:56  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+112:53  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+113:69  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+135:34  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+181:25  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+242:79  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+242:95  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+271:83  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+271:102  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+271:158  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+295:82  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+295:102  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+295:185  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+319:80  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+319:97  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/(auth)/inventory/movements/page.tsx
+5:8  Error: 'Link' is defined but never used.  @typescript-eslint/no-unused-vars
+66:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/reference/categories/add/page.tsx
+29:50  Error: 'loadingCategories' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+51:25  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+100:59  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/(auth)/reference/products/add/page.tsx
+32:50  Error: 'loadingCategories' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+35:43  Error: 'loadingUoms' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+63:25  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+112:67  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+141:59  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/(auth)/reference/products/page.tsx
+19:33  Error: 'useEffect' is defined but never used.  @typescript-eslint/no-unused-vars
+56:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+74:18  Error: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/reference/warehouses/add/page.tsx
+48:25  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/(auth)/requests/[id]/page.tsx
+10:10  Error: 'cn' is defined but never used.  @typescript-eslint/no-unused-vars
+23:5  Error: 'Package' is defined but never used.  @typescript-eslint/no-unused-vars
+46:10  Error: 'Textarea' is defined but never used.  @typescript-eslint/no-unused-vars
+54:13  Error: 'user' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+77:39  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+108:39  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+114:58  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+129:39  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+132:8  Warning: React Hook useEffect has missing dependencies: 'id' and 'updateWH'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+137:36  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+139:33  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+229:83  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+290:71  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+301:86  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+378:93  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+390:109  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+434:53  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+440:50  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+441:47  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+475:89  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+529:10  Error: 'TimelineItem' is defined but never used.  @typescript-eslint/no-unused-vars
+530:5  Error: 'title' is defined but never used.  @typescript-eslint/no-unused-vars
+531:5  Error: 'subtitle' is defined but never used.  @typescript-eslint/no-unused-vars
+532:5  Error: 'icon' is defined but never used.  @typescript-eslint/no-unused-vars
+533:5  Error: 'isCompleted' is defined but never used.  @typescript-eslint/no-unused-vars
+534:5  Error: 'active' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/(auth)/requests/drafts/page.tsx
+14:10  Error: 'Badge' is defined but never used.  @typescript-eslint/no-unused-vars
+82:48  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/(auth)/requests/new/page.tsx
+25:35  Error: 'AlertCircle' is defined but never used.  @typescript-eslint/no-unused-vars
+25:48  Error: 'FilePlus2' is defined but never used.  @typescript-eslint/no-unused-vars
+25:122  Error: 'FileText' is defined but never used.  @typescript-eslint/no-unused-vars
+25:142  Error: 'UserCheck' is defined but never used.  @typescript-eslint/no-unused-vars
+27:10  Error: 'WorkflowAssignmentsCard' is defined but never used.  @typescript-eslint/no-unused-vars
+62:62  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+85:49  Error: 'isLoadingAssignments' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+195:25  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+226:63  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+258:48  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+391:76  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/(auth)/requests/page.tsx
+57:29  Warning: React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead.  react-hooks/exhaustive-deps
+
+./src/app/(auth)/requests/participated/page.tsx
+84:48  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/components/layout/app-shell.tsx
+43:15  Error: 'segments' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/layout/sidebar.tsx
+16:5  Error: 'BarChart3' is defined but never used.  @typescript-eslint/no-unused-vars
+18:5  Error: 'Settings' is defined but never used.  @typescript-eslint/no-unused-vars
+19:5  Error: 'HelpCircle' is defined but never used.  @typescript-eslint/no-unused-vars
+20:5  Error: 'PlusCircle' is defined but never used.  @typescript-eslint/no-unused-vars
+23:5  Error: 'ClipboardList' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/layout/top-bar.tsx
+9:5  Error: 'LayoutList' is defined but never used.  @typescript-eslint/no-unused-vars
+10:5  Error: 'Kanban' is defined but never used.  @typescript-eslint/no-unused-vars
+11:5  Error: 'Calendar' is defined but never used.  @typescript-eslint/no-unused-vars
+12:5  Error: 'BarChart2' is defined but never used.  @typescript-eslint/no-unused-vars
+27:10  Error: 'Tabs' is defined but never used.  @typescript-eslint/no-unused-vars
+27:16  Error: 'TabsList' is defined but never used.  @typescript-eslint/no-unused-vars
+27:26  Error: 'TabsTrigger' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/workflow/TaskActionBar.tsx
+1:20  Error: 'useEffect' is defined but never used.  @typescript-eslint/no-unused-vars
+3:10  Error: 'useRequests' is defined but never used.  @typescript-eslint/no-unused-vars
+6:10  Error: 'Textarea' is defined but never used.  @typescript-eslint/no-unused-vars
+7:10  Error: 'Card' is defined but never used.  @typescript-eslint/no-unused-vars
+7:16  Error: 'CardHeader' is defined but never used.  @typescript-eslint/no-unused-vars
+7:28  Error: 'CardTitle' is defined but never used.  @typescript-eslint/no-unused-vars
+7:39  Error: 'CardContent' is defined but never used.  @typescript-eslint/no-unused-vars
+8:10  Error: 'Badge' is defined but never used.  @typescript-eslint/no-unused-vars
+9:10  Error: 'Table' is defined but never used.  @typescript-eslint/no-unused-vars
+9:17  Error: 'TableHeader' is defined but never used.  @typescript-eslint/no-unused-vars
+9:30  Error: 'TableRow' is defined but never used.  @typescript-eslint/no-unused-vars
+9:40  Error: 'TableHead' is defined but never used.  @typescript-eslint/no-unused-vars
+9:51  Error: 'TableBody' is defined but never used.  @typescript-eslint/no-unused-vars
+9:62  Error: 'TableCell' is defined but never used.  @typescript-eslint/no-unused-vars
+10:10  Error: 'Select' is defined but never used.  @typescript-eslint/no-unused-vars
+10:18  Error: 'SelectTrigger' is defined but never used.  @typescript-eslint/no-unused-vars
+10:33  Error: 'SelectValue' is defined but never used.  @typescript-eslint/no-unused-vars
+10:46  Error: 'SelectContent' is defined but never used.  @typescript-eslint/no-unused-vars
+10:61  Error: 'SelectItem' is defined but never used.  @typescript-eslint/no-unused-vars
+16:5  Error: 'Send' is defined but never used.  @typescript-eslint/no-unused-vars
+17:5  Error: 'Save' is defined but never used.  @typescript-eslint/no-unused-vars
+18:5  Error: 'ClipboardCheck' is defined but never used.  @typescript-eslint/no-unused-vars
+21:10  Error: 'cn' is defined but never used.  @typescript-eslint/no-unused-vars
+24:11  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+25:14  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+32:19  Error: 'setNotes' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+38:11  Error: 'needsClaim' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+40:11  Error: 'handleClaim' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+44:18  Error: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+53:35  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+58:25  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+76:54  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+87:25  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules

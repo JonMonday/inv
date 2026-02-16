@@ -143,6 +143,10 @@ public class ReferenceController : ControllerBase
             "workflow-condition-operator" => await HandleReference(_db.WorkflowConditionOperators, request, 
                 term => x => x.Name.ToLower().Contains(term) || x.Code.ToLower().Contains(term), 
                 x => x.Name, x => new ReferenceItemDto(x.WorkflowConditionOperatorId, x.Code, x.Name, "", true)),
+
+            "workflow-rejection-mode" => await HandleReference(_db.RejectionModes, request, 
+                term => x => x.Name.ToLower().Contains(term) || x.Code.ToLower().Contains(term), 
+                x => x.Name, x => new ReferenceItemDto(x.RejectionModeId, x.Code, x.Name, "", true)),
             
             "workflow-instance-status" => await HandleReference(_db.WorkflowInstanceStatuses, request, 
                 term => x => x.Name.ToLower().Contains(term) || x.Code.ToLower().Contains(term), 

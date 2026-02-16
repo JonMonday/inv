@@ -3,7 +3,7 @@
 import { useUsers } from '@/hooks/useAdmin';
 import apiClient from '@/lib/api/client';
 import { useToast } from '@/hooks/use-toast';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { Search } from 'lucide-react';
 import {
@@ -81,12 +81,12 @@ export default function AdminUsersPage() {
     const totalPages = usersData?.totalPages || 0;
     const totalRecords = usersData?.totalRecords || 0;
 
-    const debouncedSearch = useCallback(
-        debounce((term: string) => {
+    const debouncedSearch = useMemo(
+        () => debounce((term: string) => {
             setSearchTerm(term);
             setPage(1);
         }, 500),
-        []
+        [setSearchTerm, setPage]
     );
 
     const handleResetPassword = async () => {

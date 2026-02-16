@@ -96,6 +96,8 @@ public class WorkflowController : ControllerBase
             {
                 t.WorkflowTemplateId,
                 t.Code,
+                t.DepartmentId,
+                t.RejectionModeId,
                 t.Name,
                 t.Status,
                 t.IsActive,
@@ -141,6 +143,8 @@ public class WorkflowController : ControllerBase
             template.IsActive,
             template.CreatedAt,
             template.PublishedAt,
+            template.DepartmentId,
+            template.RejectionModeId,
             template.SourceTemplateId,
             Steps = template.Steps.OrderBy(s => s.SequenceNo).Select(s => new
             {
@@ -177,7 +181,7 @@ public class WorkflowController : ControllerBase
         return Ok(new ApiResponse<object> { Data = data });
     }
 
-    public record CreateTemplateRequest(string Code, string Name);
+    public record CreateTemplateRequest(string Name, long DepartmentId, long RejectionModeId);
 
     [HttpPost("templates")]
     [RequirePermission("workflow_template.create")]
@@ -188,13 +192,18 @@ public class WorkflowController : ControllerBase
         if (await _db.WorkflowTemplates.AnyAsync(t => t.Name == req.Name))
             return Conflict(new ApiErrorResponse { Message = "Template name must be unique." });
 
-        if (await _db.WorkflowTemplates.AnyAsync(t => t.Code == req.Code))
-            return Conflict(new ApiErrorResponse { Message = "Template code must be unique." });
+        var dept = await _db.Departments.FindAsync(req.DepartmentId);
+        if (dept == null) return BadRequest(new ApiErrorResponse { Message = "Invalid DepartmentId." });
+
+        var count = await _db.WorkflowTemplates.CountAsync(t => t.DepartmentId == req.DepartmentId);
+        var code = $"{dept.Name.Substring(0, 2).ToUpper()}-{count + 1:D2}";
 
         var template = new WorkflowTemplate
         {
-            Code = req.Code.Trim(),
+            Code = code,
             Name = req.Name.Trim(),
+            DepartmentId = req.DepartmentId,
+            RejectionModeId = req.RejectionModeId,
             Status = WorkflowTemplateStatuses.Draft,
             IsActive = true,
             CreatedByUserId = userId,
@@ -204,10 +213,10 @@ public class WorkflowController : ControllerBase
         _db.WorkflowTemplates.Add(template);
         await _db.SaveChangesAsync();
 
-        return Ok(new ApiResponse<object> { Data = new { template.WorkflowTemplateId } });
+        return Ok(new ApiResponse<object> { Data = new { template.WorkflowTemplateId, Code = code } });
     }
 
-    public record UpdateTemplateMetaRequest(string Code, string Name, bool IsActive);
+    public record UpdateTemplateMetaRequest(string Name, bool IsActive, long DepartmentId, long RejectionModeId);
 
     [HttpPut("templates/{templateId:long}")]
     [RequirePermission("workflow_template.update")]
@@ -221,12 +230,10 @@ public class WorkflowController : ControllerBase
         if (await _db.WorkflowTemplates.AnyAsync(t => t.WorkflowTemplateId != templateId && t.Name == req.Name))
             return Conflict(new ApiErrorResponse { Message = "Template name must be unique." });
 
-        if (await _db.WorkflowTemplates.AnyAsync(t => t.WorkflowTemplateId != templateId && t.Code == req.Code))
-            return Conflict(new ApiErrorResponse { Message = "Template code must be unique." });
-
         template.Name = req.Name.Trim();
-        template.Code = req.Code.Trim();
         template.IsActive = req.IsActive;
+        template.DepartmentId = req.DepartmentId;
+        template.RejectionModeId = req.RejectionModeId;
 
         await _db.SaveChangesAsync();
         return Ok(new ApiResponse<string> { Data = "Template updated." });
@@ -238,10 +245,7 @@ public class WorkflowController : ControllerBase
     public record TemplateStepDto(
         string StepKey,
         string Name,
-        string StepTypeCode,
         int SequenceNo,
-        bool IsActive = true,
-        bool IsSystemRequired = false,
         TemplateStepRuleDto? Rule = null
     );
 
@@ -270,102 +274,192 @@ public class WorkflowController : ControllerBase
         if (req.Steps == null || req.Steps.Count == 0)
             return BadRequest(new ApiErrorResponse { Message = "At least one step is required." });
 
-        var dupKeys = req.Steps.GroupBy(s => s.StepKey.Trim()).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
-        if (dupKeys.Any())
-            return BadRequest(new ApiErrorResponse { Message = $"Duplicate StepKey(s): {string.Join(", ", dupKeys)}" });
+        var template = await _db.WorkflowTemplates
+            .Include(t => t.Department)
+            .Include(t => t.RejectionMode)
+            .FirstAsync(t => t.WorkflowTemplateId == templateId);
 
         var stepTypes = await _db.WorkflowStepTypes.AsNoTracking().ToDictionaryAsync(x => x.Code, x => x.WorkflowStepTypeId);
         var actionTypes = await _db.WorkflowActionTypes.AsNoTracking().ToDictionaryAsync(x => x.Code, x => x.WorkflowActionTypeId);
         var assignmentModes = await _db.WorkflowAssignmentModes.AsNoTracking().ToDictionaryAsync(x => x.Code, x => x.AssignmentModeId);
-
-        foreach (var s in req.Steps)
-        {
-            if (!stepTypes.ContainsKey(s.StepTypeCode))
-                return BadRequest(new ApiErrorResponse { Message = $"Unknown StepTypeCode: {s.StepTypeCode}" });
-
-            if (s.Rule != null && !assignmentModes.ContainsKey(s.Rule.AssignmentModeCode))
-                return BadRequest(new ApiErrorResponse { Message = $"Unknown AssignmentModeCode: {s.Rule.AssignmentModeCode}" });
-        }
-
-        foreach (var tr in req.Transitions ?? new List<TemplateTransitionDto>())
-        {
-            if (!actionTypes.ContainsKey(tr.ActionCode))
-                return BadRequest(new ApiErrorResponse { Message = $"Unknown ActionCode: {tr.ActionCode}" });
-        }
-
-        var keys = req.Steps.Select(s => s.StepKey.Trim()).ToHashSet();
-        foreach (var tr in req.Transitions ?? new List<TemplateTransitionDto>())
-        {
-            if (!keys.Contains(tr.FromStepKey.Trim()) || !keys.Contains(tr.ToStepKey.Trim()))
-                return BadRequest(new ApiErrorResponse { Message = $"Transition references unknown step key: {tr.FromStepKey} -> {tr.ToStepKey}" });
-        }
+        var storekeeperRole = await _db.Roles.FirstOrDefaultAsync(r => r.Code == RoleCodes.Storekeeper);
 
         await using var tx = await _db.Database.BeginTransactionAsync();
 
-        // wipe existing definition
+        // 1. Wipe existing
         _db.WorkflowTransitions.RemoveRange(await _db.WorkflowTransitions.Where(x => x.WorkflowTemplateId == templateId).ToListAsync());
-
-        var existingRules = await _db.WorkflowStepRules
-            .Where(r => r.WorkflowStep.WorkflowTemplateId == templateId)
-            .ToListAsync();
-        _db.WorkflowStepRules.RemoveRange(existingRules);
-
+        _db.WorkflowStepRules.RemoveRange(await _db.WorkflowStepRules.Where(r => r.WorkflowStep.WorkflowTemplateId == templateId).ToListAsync());
         _db.WorkflowSteps.RemoveRange(await _db.WorkflowSteps.Where(s => s.WorkflowTemplateId == templateId).ToListAsync());
         await _db.SaveChangesAsync();
 
-        // insert steps
-        var stepEntities = req.Steps.Select(s => new WorkflowStep
-        {
-            WorkflowTemplateId = templateId,
-            StepKey = s.StepKey.Trim(),
-            Name = s.Name.Trim(),
-            WorkflowStepTypeId = stepTypes[s.StepTypeCode],
-            SequenceNo = s.SequenceNo,
-            IsActive = s.IsActive,
-            IsSystemRequired = s.IsSystemRequired
-        }).ToList();
+        // 2. Prepare Step List (System + User + System)
+        var allSteps = new List<WorkflowStep>();
+        
+        // Seq 0: Submission (System)
+        var sSubmission = new WorkflowStep { 
+            WorkflowTemplateId = templateId, 
+            StepKey = "SUBMISSION", 
+            Name = "Submission", 
+            WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Start], 
+            SequenceNo = 0, 
+            IsSystemRequired = true 
+        };
+        allSteps.Add(sSubmission);
 
-        _db.WorkflowSteps.AddRange(stepEntities);
+        // Seq 1..N: User Steps
+        int seq = 1;
+        foreach (var userStep in req.Steps.OrderBy(s => s.SequenceNo))
+        {
+            allSteps.Add(new WorkflowStep { 
+                WorkflowTemplateId = templateId, 
+                StepKey = userStep.StepKey.Trim().ToUpper(), 
+                Name = userStep.Name.Trim(), 
+                WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Approval], 
+                SequenceNo = seq++, 
+                IsSystemRequired = false 
+            });
+        }
+
+        // Seq N+1: Fulfillment (System) - Dedicated to Storekeeper + Workflow Dept
+        var sFulfillment = new WorkflowStep { 
+            WorkflowTemplateId = templateId, 
+            StepKey = "FULFILLMENT", 
+            Name = "Fulfillment", 
+            WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Fulfillment], 
+            SequenceNo = seq++, 
+            IsSystemRequired = true 
+        };
+        allSteps.Add(sFulfillment);
+
+        // Seq N+2: Confirmation (System) - Back to Requester
+        var sConfirmation = new WorkflowStep { 
+            WorkflowTemplateId = templateId, 
+            StepKey = "CONFIRMATION", 
+            Name = "Confirmation", 
+            WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.Review], 
+            SequenceNo = seq++, 
+            IsSystemRequired = true 
+        };
+        allSteps.Add(sConfirmation);
+
+        // Seq N+3: End (System)
+        var sEnd = new WorkflowStep { 
+            WorkflowTemplateId = templateId, 
+            StepKey = "END", 
+            Name = "End Point", 
+            WorkflowStepTypeId = stepTypes[WorkflowStepTypeCodes.End], 
+            SequenceNo = seq++, 
+            IsSystemRequired = true 
+        };
+        allSteps.Add(sEnd);
+
+        _db.WorkflowSteps.AddRange(allSteps);
         await _db.SaveChangesAsync();
 
-        var stepKeyToId = stepEntities.ToDictionary(s => s.StepKey, s => s.WorkflowStepId);
+        // 3. Rules & Transitions
+        var transitions = new List<WorkflowTransition>();
+        var rules = new List<WorkflowStepRule>();
+        var userRuleMap = req.Steps.ToDictionary(s => s.StepKey.Trim().ToUpper(), s => s.Rule);
 
-        // insert rules
-        var rules = req.Steps.Where(s => s.Rule != null).Select(s => new WorkflowStepRule
+        for (int i = 0; i < allSteps.Count; i++)
         {
-            WorkflowStepId = stepKeyToId[s.StepKey.Trim()],
-            AssignmentModeId = assignmentModes[s.Rule!.AssignmentModeCode],
-            RoleId = s.Rule.RoleId,
-            DepartmentId = s.Rule.DepartmentId,
-            UseRequesterDepartment = s.Rule.UseRequesterDepartment,
-            AllowRequesterSelect = s.Rule.AllowRequesterSelect,
-            MinApprovers = s.Rule.MinApprovers,
-            RequireAll = s.Rule.RequireAll,
-            AllowReassign = s.Rule.AllowReassign,
-            AllowDelegate = s.Rule.AllowDelegate,
-            SLA_Minutes = s.Rule.SLA_Minutes
-        }).ToList();
+            var current = allSteps[i];
+            
+            // --- Rules ---
+            if (current.StepKey == "SUBMISSION")
+            {
+                rules.Add(new WorkflowStepRule { 
+                    WorkflowStepId = current.WorkflowStepId, 
+                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Requestor] 
+                });
+            }
+            else if (current.StepKey == "FULFILLMENT")
+            {
+                rules.Add(new WorkflowStepRule { 
+                    WorkflowStepId = current.WorkflowStepId, 
+                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.RoleAndDepartment],
+                    RoleId = storekeeperRole?.RoleId,
+                    DepartmentId = template.DepartmentId
+                });
+            }
+            else if (current.StepKey == "CONFIRMATION")
+            {
+                rules.Add(new WorkflowStepRule { 
+                    WorkflowStepId = current.WorkflowStepId, 
+                    AssignmentModeId = assignmentModes[WorkflowAssignmentModeCodes.Requestor] 
+                });
+            }
+            else if (current.WorkflowStepTypeId == stepTypes[WorkflowStepTypeCodes.Approval])
+            {
+                userRuleMap.TryGetValue(current.StepKey, out var userRule);
+
+                rules.Add(new WorkflowStepRule { 
+                    WorkflowStepId = current.WorkflowStepId, 
+                    AssignmentModeId = (userRule != null && assignmentModes.ContainsKey(userRule.AssignmentModeCode))
+                        ? assignmentModes[userRule.AssignmentModeCode]
+                        : assignmentModes[WorkflowAssignmentModeCodes.Department],
+                    RoleId = userRule?.RoleId,
+                    DepartmentId = userRule?.DepartmentId ?? template.DepartmentId,
+                    UseRequesterDepartment = userRule?.UseRequesterDepartment ?? false,
+                    AllowRequesterSelect = userRule?.AllowRequesterSelect ?? true,
+                    MinApprovers = userRule?.MinApprovers ?? 1,
+                    RequireAll = userRule?.RequireAll ?? true,
+                    AllowReassign = userRule?.AllowReassign ?? true,
+                    AllowDelegate = userRule?.AllowDelegate ?? true,
+                    SLA_Minutes = userRule?.SLA_Minutes
+                });
+            }
+
+            // --- Transitions ---
+            if (i < allSteps.Count - 1)
+            {
+                var next = allSteps[i + 1];
+                
+                // Normal Forward Action
+                string actionCode = current.StepKey switch {
+                    "SUBMISSION" => WorkflowActionCodes.Submit,
+                    "FULFILLMENT" => WorkflowActionCodes.Complete,
+                    _ => WorkflowActionCodes.Approve
+                };
+
+                transitions.Add(new WorkflowTransition {
+                    WorkflowTemplateId = templateId,
+                    FromWorkflowStepId = current.WorkflowStepId,
+                    WorkflowActionTypeId = actionTypes[actionCode],
+                    ToWorkflowStepId = next.WorkflowStepId
+                });
+
+                // Rejection / Send Back Logic
+                if (current.WorkflowStepTypeId == stepTypes[WorkflowStepTypeCodes.Approval] || current.StepKey == "FULFILLMENT")
+                {
+                    var targetStep = template.RejectionMode?.Code == RejectionModeCodes.Previous && i > 1
+                        ? allSteps[i - 1] 
+                        : sSubmission;
+
+                    transitions.Add(new WorkflowTransition {
+                        WorkflowTemplateId = templateId,
+                        FromWorkflowStepId = current.WorkflowStepId,
+                        WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Reject],
+                        ToWorkflowStepId = targetStep.WorkflowStepId
+                    });
+                }
+            }
+        }
+
+        // Cancel only from submission
+        transitions.Add(new WorkflowTransition {
+            WorkflowTemplateId = templateId,
+            FromWorkflowStepId = sSubmission.WorkflowStepId,
+            WorkflowActionTypeId = actionTypes[WorkflowActionCodes.Cancel],
+            ToWorkflowStepId = sEnd.WorkflowStepId
+        });
 
         _db.WorkflowStepRules.AddRange(rules);
-        await _db.SaveChangesAsync();
-
-        // insert transitions
-        var transitions = (req.Transitions ?? new List<TemplateTransitionDto>())
-            .Select(tr => new WorkflowTransition
-            {
-                WorkflowTemplateId = templateId,
-                FromWorkflowStepId = stepKeyToId[tr.FromStepKey.Trim()],
-                WorkflowActionTypeId = actionTypes[tr.ActionCode],
-                ToWorkflowStepId = stepKeyToId[tr.ToStepKey.Trim()]
-            })
-            .ToList();
-
         _db.WorkflowTransitions.AddRange(transitions);
         await _db.SaveChangesAsync();
 
         await tx.CommitAsync();
-
-        return Ok(new ApiResponse<string> { Data = "Template definition saved." });
+        return Ok(new ApiResponse<string> { Data = "Template definition auto-generated." });
     }
 
     [HttpPost("templates/{templateId:long}/publish")]
@@ -392,7 +486,20 @@ public class WorkflowController : ControllerBase
         return Ok(new ApiResponse<string> { Data = "Template published (locked)." });
     }
 
-    public record CloneTemplateRequest(string NewCode, string NewName);
+    [HttpPost("templates/{templateId:long}/toggle-active")]
+    [RequirePermission("workflow_template.update")]
+    public async Task<ActionResult<ApiResponse<bool>>> ToggleActive(long templateId)
+    {
+        var template = await _db.WorkflowTemplates.FirstOrDefaultAsync(t => t.WorkflowTemplateId == templateId);
+        if (template == null) return NotFound();
+
+        template.IsActive = !template.IsActive;
+        await _db.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Data = template.IsActive });
+    }
+
+    public record CloneTemplateRequest(string NewName);
 
     [HttpPost("templates/{templateId:long}/clone")]
     [RequirePermission("workflow_template.clone")]
@@ -405,20 +512,20 @@ public class WorkflowController : ControllerBase
             .Include(t => t.Transitions)
             .FirstOrDefaultAsync(t => t.WorkflowTemplateId == templateId);
 
-        if (source == null) return NotFound();
-
         if (await _db.WorkflowTemplates.AnyAsync(t => t.Name == req.NewName))
             return Conflict(new ApiErrorResponse { Message = "Template name must be unique." });
 
-        if (await _db.WorkflowTemplates.AnyAsync(t => t.Code == req.NewCode))
-            return Conflict(new ApiErrorResponse { Message = "Template code must be unique." });
-
         await using var tx = await _db.Database.BeginTransactionAsync();
+
+        var count = await _db.WorkflowTemplates.CountAsync(t => t.DepartmentId == source.DepartmentId);
+        var newCode = $"{source.Department!.Code}-{count + 1:D2}";
 
         var clone = new WorkflowTemplate
         {
-            Code = req.NewCode.Trim(),
+            Code = newCode,
             Name = req.NewName.Trim(),
+            DepartmentId = source.DepartmentId,
+            RejectionModeId = source.RejectionModeId,
             Status = WorkflowTemplateStatuses.Draft,
             IsActive = true,
             SourceTemplateId = source.WorkflowTemplateId,

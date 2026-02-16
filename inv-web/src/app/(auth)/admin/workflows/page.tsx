@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api/client';
 import { PagedResponse } from '@/lib/api/types';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { Input } from '@/components/ui/input';
-import { Search, Share2, Plus, Settings2, History, CheckCircle2, Clock, Eye, Copy, MoreHorizontal } from 'lucide-react';
+import { Zap, Search, Share2, Plus, CheckCircle2, Clock, Eye, Copy, Power, PowerOff } from 'lucide-react';
 import { debounce } from 'lodash';
-import { useWorkflowTemplate } from '@/hooks/useAdmin';
+import { useWorkflowTemplate, useDepartments, useReferenceData, usePublishWorkflow, useToggleWorkflowActive } from '@/hooks/useAdmin';
 import { WorkflowFlowView } from '@/components/workflow/WorkflowFlowView';
 import {
     Table,
@@ -42,12 +42,14 @@ interface WorkflowTemplate {
     status: string;
     publishedAt?: string;
     sourceTemplateId?: number;
+    departmentId?: number;
+    rejectionModeId?: number;
 }
 
 function useCreateWorkflowTemplate() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (data: { name: string, code: string }) => {
+        mutationFn: async (data: { name: string, departmentId: number, rejectionModeId: number }) => {
             const response = await apiClient.post('/api/workflow/templates', data);
             return response.data;
         },
@@ -60,7 +62,7 @@ function useCreateWorkflowTemplate() {
 function useCloneWorkflowTemplate() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ id, data }: { id: number, data: { newCode: string, newName: string } }) => {
+        mutationFn: async ({ id, data }: { id: number, data: { newName: string } }) => {
             const response = await apiClient.post(`/api/workflow/templates/${id}/clone`, data);
             return response.data;
         },
@@ -76,17 +78,59 @@ export default function WorkflowTemplatesPage() {
     const { toast } = useToast();
 
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-    const [newTemplate, setNewTemplate] = useState({ name: '', code: '' });
+    const [newTemplate, setNewTemplate] = useState({ name: '', departmentId: 0, rejectionModeId: 0 });
 
     const [isActionModalOpen, setIsActionModalOpen] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplate | null>(null);
 
     const [isCloneDialogOpen, setIsCloneDialogOpen] = useState(false);
     const [isFlowModalOpen, setIsFlowModalOpen] = useState(false);
-    const [cloneData, setCloneData] = useState({ newName: '', newCode: '' });
+    const [cloneData, setCloneData] = useState({ newName: '' });
+
+    const { data: departments } = useDepartments();
+    const { data: rejectionModes } = useReferenceData('workflow-rejection-mode');
 
     const createMutation = useCreateWorkflowTemplate();
     const cloneMutation = useCloneWorkflowTemplate();
+    const publishMutation = usePublishWorkflow();
+    const toggleActiveMutation = useToggleWorkflowActive();
+
+    const handleToggleActive = async () => {
+        if (!selectedTemplate) return;
+        try {
+            await toggleActiveMutation.mutateAsync(selectedTemplate.workflowTemplateId);
+            toast({
+                title: 'Success',
+                description: `Template ${selectedTemplate.isActive ? 'deactivated' : 'activated'} successfully.`
+            });
+            setIsActionModalOpen(false);
+            setSelectedTemplate(null);
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast({
+                title: 'Error',
+                description: err.response?.data?.message || (error as Error).message || 'Failed to toggle activation state',
+                variant: 'destructive'
+            });
+        }
+    };
+
+    const handlePublish = async () => {
+        if (!selectedTemplate) return;
+        try {
+            await publishMutation.mutateAsync(selectedTemplate.workflowTemplateId);
+            toast({ title: 'Success', description: 'Template published successfully.' });
+            setIsActionModalOpen(false);
+            setSelectedTemplate(null);
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast({
+                title: 'Error',
+                description: err.response?.data?.message || (error as Error).message || 'Failed to publish template',
+                variant: 'destructive'
+            });
+        }
+    };
 
     const { data: pagedData, isLoading } = useQuery<PagedResponse<WorkflowTemplate[]>>({
         queryKey: ['workflow', 'templates', { pageNumber: page, pageSize: 10, searchTerm }],
@@ -102,21 +146,21 @@ export default function WorkflowTemplatesPage() {
     const totalPages = pagedData?.totalPages || 0;
     const totalRecords = pagedData?.totalRecords || 0;
 
-    const debouncedSearch = useCallback(
-        debounce((term: string) => {
+    const debouncedSearch = useMemo(
+        () => debounce((term: string) => {
             setSearchTerm(term);
             setPage(1);
         }, 500),
-        []
+        [setSearchTerm, setPage]
     );
 
     const handleCreateTemplate = async () => {
-        if (!newTemplate.name || !newTemplate.code) return;
+        if (!newTemplate.name || !newTemplate.departmentId || !newTemplate.rejectionModeId) return;
         try {
             await createMutation.mutateAsync(newTemplate);
             toast({ title: 'Success', description: 'Template created successfully.' });
             setIsCreateDialogOpen(false);
-            setNewTemplate({ name: '', code: '' });
+            setNewTemplate({ name: '', departmentId: 0, rejectionModeId: 0 });
         } catch (error: unknown) {
             const err = error as { response?: { data?: { message?: string } } };
             toast({
@@ -128,7 +172,7 @@ export default function WorkflowTemplatesPage() {
     };
 
     const handleCloneTemplate = async () => {
-        if (!selectedTemplate || !cloneData.newName || !cloneData.newCode) return;
+        if (!selectedTemplate || !cloneData.newName) return;
         try {
             await cloneMutation.mutateAsync({
                 id: selectedTemplate.workflowTemplateId,
@@ -136,7 +180,7 @@ export default function WorkflowTemplatesPage() {
             });
             toast({ title: 'Success', description: 'Template cloned successfully.' });
             setIsCloneDialogOpen(false);
-            setCloneData({ newName: '', newCode: '' });
+            setCloneData({ newName: '' });
             setSelectedTemplate(null);
         } catch (error: unknown) {
             const err = error as { response?: { data?: { message?: string } } };
@@ -176,6 +220,8 @@ export default function WorkflowTemplatesPage() {
                         <TableRow>
                             <TableHead>Template Name</TableHead>
                             <TableHead>Code</TableHead>
+                            <TableHead>Department</TableHead>
+                            <TableHead>Rejection Mode</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Created At</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -187,6 +233,8 @@ export default function WorkflowTemplatesPage() {
                                 <TableRow key={i}>
                                     <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                                     <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                                     <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                                     <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
@@ -194,7 +242,7 @@ export default function WorkflowTemplatesPage() {
                             ))
                         ) : templates.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-48 text-center text-muted-foreground">
+                                <TableCell colSpan={7} className="h-48 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center gap-2">
                                         <Share2 className="h-8 w-8 opacity-20" />
                                         <p>No workflow templates found.</p>
@@ -216,6 +264,12 @@ export default function WorkflowTemplatesPage() {
                                         <Badge variant="outline" className="font-mono text-[10px] tracking-wider px-2 py-0.5">
                                             {row.code}
                                         </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {row.departmentId ? departments?.find(d => d.departmentId === row.departmentId)?.name || '-' : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {row.rejectionModeId ? rejectionModes?.data?.find((r: { id: number, name: string }) => r.id === row.rejectionModeId)?.name || '-' : '-'}
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant={row.isActive ? "default" : "secondary"} className="text-[10px] gap-1 px-2 py-0.5">
@@ -294,8 +348,7 @@ export default function WorkflowTemplatesPage() {
                             onClick={() => {
                                 setIsActionModalOpen(false);
                                 setCloneData({
-                                    newName: `${selectedTemplate?.name} (Clone)`,
-                                    newCode: `${selectedTemplate?.code}_CLONE`
+                                    newName: `${selectedTemplate?.name} (Clone)`
                                 });
                                 setIsCloneDialogOpen(true);
                             }}
@@ -306,6 +359,49 @@ export default function WorkflowTemplatesPage() {
                                 <span className="text-[11px] text-muted-foreground font-normal">Create a draft from this template</span>
                             </div>
                         </Button>
+
+                        {selectedTemplate?.status === 'DRAFT' && (
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start h-12 bg-primary/5 hover:bg-primary/10 border-primary/20"
+                                onClick={handlePublish}
+                                disabled={publishMutation.isPending}
+                            >
+                                <Zap className="mr-3 h-5 w-5 text-primary" />
+                                <div className="flex flex-col items-start">
+                                    <span className="font-medium">Publish Template</span>
+                                    <span className="text-[11px] text-muted-foreground font-normal">Lock definition and enable for use</span>
+                                </div>
+                            </Button>
+                        )}
+
+                        {selectedTemplate?.isActive ? (
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start h-12 text-destructive hover:text-destructive hover:bg-destructive/5"
+                                onClick={handleToggleActive}
+                                disabled={toggleActiveMutation.isPending}
+                            >
+                                <PowerOff className="mr-3 h-5 w-5" />
+                                <div className="flex flex-col items-start">
+                                    <span className="font-medium">Deactivate Template</span>
+                                    <span className="text-[11px] opacity-70 font-normal">Prevent new instances from being created</span>
+                                </div>
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start h-12 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                onClick={handleToggleActive}
+                                disabled={toggleActiveMutation.isPending}
+                            >
+                                <Power className="mr-3 h-5 w-5" />
+                                <div className="flex flex-col items-start">
+                                    <span className="font-medium">Activate Template</span>
+                                    <span className="text-[11px] opacity-70 font-normal">Allow template to be used for new requests</span>
+                                </div>
+                            </Button>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="ghost" onClick={() => setIsActionModalOpen(false)}>Close</Button>
@@ -336,14 +432,6 @@ export default function WorkflowTemplatesPage() {
                                 onChange={e => setCloneData({ ...cloneData, newName: e.target.value })}
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label>New Code (Unique)</Label>
-                            <Input
-                                placeholder="e.g. FIN_FLOW_V2"
-                                value={cloneData.newCode}
-                                onChange={e => setCloneData({ ...cloneData, newCode: e.target.value.toUpperCase().replace(/\s/g, '_') })}
-                            />
-                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsCloneDialogOpen(false)}>Cancel</Button>
@@ -372,12 +460,30 @@ export default function WorkflowTemplatesPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Code (Unique)</Label>
-                            <Input
-                                placeholder="e.g. FIN_FLOW"
-                                value={newTemplate.code}
-                                onChange={e => setNewTemplate({ ...newTemplate, code: e.target.value.toUpperCase().replace(/\s/g, '_') })}
-                            />
+                            <Label>Department</Label>
+                            <select
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                value={newTemplate.departmentId}
+                                onChange={e => setNewTemplate({ ...newTemplate, departmentId: parseInt(e.target.value) })}
+                            >
+                                <option value={0}>Select Department...</option>
+                                {departments?.map(d => (
+                                    <option key={d.departmentId} value={d.departmentId}>{d.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Rejection Mode</Label>
+                            <select
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                value={newTemplate.rejectionModeId}
+                                onChange={e => setNewTemplate({ ...newTemplate, rejectionModeId: parseInt(e.target.value) })}
+                            >
+                                <option value={0}>Select Rejection Mode...</option>
+                                {rejectionModes?.data.map(m => (
+                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
                     <DialogFooter>
