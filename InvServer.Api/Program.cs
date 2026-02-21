@@ -41,7 +41,11 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddCors(options => 
 {
     options.AddPolicy("Default", p => p
-        .WithOrigins("http://localhost:3000", "http://localhost:3001")
+        .WithOrigins(
+            "http://localhost:3000", 
+            "http://localhost:3001", 
+            "https://inv-3a5q-m30yvfht0-jonmondays-projects.vercel.app"
+        )
         .AllowAnyMethod()
         .AllowAnyHeader()
         .AllowCredentials());
