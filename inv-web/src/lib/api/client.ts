@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '@/store/authStore';
 import { v4 as uuidv4 } from 'uuid';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5119';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://inv-987776252087.europe-west1.run.app';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
