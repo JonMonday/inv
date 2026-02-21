@@ -204,7 +204,7 @@ export function useUpdateTemplateMeta() {
 export function useUpsertTemplateDefinition() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ id, data }: { id: number, data: { steps: { stepKey: string, name: string, sequenceNo: number }[], transitions?: any[] } }) => {
+        mutationFn: async ({ id, data }: { id: number, data: { steps: { stepKey: string, name: string, sequenceNo: number }[], transitions?: Partial<WorkflowTransition>[] } }) => {
             const response = await apiClient.put(`/api/workflow/templates/${id}/definition`, data);
             return response.data;
         },

@@ -4,12 +4,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
     useWorkflowTemplate,
-    usePublishWorkflow,
-    useUpdateTemplateMeta,
     useUpsertTemplateDefinition,
     useDepartments,
     useRoles,
-    useReferenceData
+    useReferenceData,
+    ReferenceItem
 } from '@/hooks/useAdmin';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -132,8 +131,6 @@ export default function WorkflowBuilderPage() {
     const { data: rejectionModes } = useReferenceData('workflow-rejection-mode');
     const { data: assignmentModes } = useReferenceData('workflow-assignment-mode');
 
-    const publishMutation = usePublishWorkflow();
-    const saveMetaMutation = useUpdateTemplateMeta();
     const saveDefMutation = useUpsertTemplateDefinition();
 
     const [steps, setSteps] = useState<WorkflowStep[]>([]);
@@ -236,7 +233,7 @@ export default function WorkflowBuilderPage() {
         // Find existing custom steps max sequence to insert after them but before fixed end steps
         // Actually, we can just insert before the first fixed end step
 
-        let insertIndex = startSteps.length + reorderableSteps.length;
+        const insertIndex = startSteps.length + reorderableSteps.length;
 
         const newStep: WorkflowStep = {
             stepKey: `NEW_STEP_${Date.now()}`, // Temporary key
@@ -280,16 +277,6 @@ export default function WorkflowBuilderPage() {
         const resequenced = newSteps.map((s, i) => ({ ...s, sequenceNo: i }));
         setSteps(resequenced);
         setActiveStepIndex(null);
-    };
-
-    const handleSaveMeta = async () => {
-        try {
-            await saveMetaMutation.mutateAsync({ id: Number(template?.workflowTemplateId), data: meta });
-            toast({ title: "Success", description: "Metadata saved." });
-        } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({ title: "Error", description: err.response?.data?.message || "Failed to save meta.", variant: "destructive" });
-        }
     };
 
     const handleSaveDefinition = async () => {
@@ -488,7 +475,7 @@ export default function WorkflowBuilderPage() {
                                                                 <div className="text-xs font-medium text-muted-foreground mb-1">ON REJECT &rarr;</div>
                                                                 <div className="font-mono text-sm font-bold text-red-600 dark:text-red-400">
                                                                     {(() => {
-                                                                        const mode = rejectionModes?.data?.find((m: any) => m.id === meta.rejectionModeId)?.code;
+                                                                        const mode = rejectionModes?.data?.find((m: ReferenceItem) => m.id === meta.rejectionModeId)?.code;
 
                                                                         if (mode === 'START') {
                                                                             return steps[0]?.name || 'SUBMISSION';
@@ -559,7 +546,7 @@ export default function WorkflowBuilderPage() {
                                                                     <SelectValue placeholder="Select mode" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
-                                                                    {assignmentModes?.data?.map((mode: any) => (
+                                                                    {assignmentModes?.data?.map((mode: ReferenceItem) => (
                                                                         <SelectItem key={mode.id} value={mode.code}>
                                                                             {mode.name}
                                                                         </SelectItem>
@@ -650,7 +637,7 @@ export default function WorkflowBuilderPage() {
 
                                     <TabsContent value="visual" className="mt-0 h-full">
                                         {template && (() => {
-                                            const mode = rejectionModes?.data?.find((m: any) => m.id === meta.rejectionModeId)?.code || 'START';
+                                            const mode = rejectionModes?.data?.find((m: ReferenceItem) => m.id === meta.rejectionModeId)?.code || 'START';
                                             return <FlowDiagram template={template} customSteps={steps} rejectionMode={mode} />;
                                         })()}
                                     </TabsContent>

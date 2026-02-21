@@ -1,12 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { Zap } from 'lucide-react';
 import { WorkflowTemplate } from '@/hooks/useAdmin';
 import { useTheme } from 'next-themes';
 
+interface Step {
+    stepKey: string;
+    name: string;
+    sequenceNo: number;
+    rule?: {
+        assignmentModeCode: string;
+        roleName?: string;
+        departmentName?: string;
+    };
+}
+
 interface FlowDiagramProps {
     template: WorkflowTemplate;
-    customSteps?: any[];
+    customSteps?: Step[];
     rejectionMode?: string;
 }
 
@@ -17,7 +28,7 @@ export function FlowDiagram({ template, customSteps, rejectionMode = 'START' }: 
     // const [error, setError] = useState<string | null>(null); // No longer needed
 
     // Use customSteps (for builder) or template steps (for viewer)
-    const steps = customSteps || template?.steps || [];
+    const steps = React.useMemo(() => customSteps || template?.steps || [], [customSteps, template?.steps]);
 
     useEffect(() => {
         const isDark = resolvedTheme === 'dark';
@@ -41,37 +52,7 @@ export function FlowDiagram({ template, customSteps, rejectionMode = 'START' }: 
         });
     }, [resolvedTheme]);
 
-    useEffect(() => {
-        if (mermaidRef.current) {
-            // Clear previous content
-            mermaidRef.current.innerHTML = '<div class="flex items-center gap-2 text-muted-foreground animate-pulse"><small>Rendering Diagram...</small></div>';
-
-            if (!steps.length) {
-                if (mermaidRef.current) mermaidRef.current.innerHTML = '';
-                return;
-            }
-
-            const renderDiagram = async () => {
-                try {
-                    const definition = generateMermaidDefinition(steps);
-                    const id = `flowDiagram-${Math.random().toString(36).substr(2, 9)}`;
-                    const { svg } = await mermaid.render(id, definition);
-                    if (mermaidRef.current) {
-                        mermaidRef.current.innerHTML = svg;
-                    }
-                } catch (err) {
-                    console.error('Mermaid render error:', err);
-                    if (mermaidRef.current) {
-                        mermaidRef.current.innerHTML = '<p class="text-[10px] text-destructive italic">Failed to render flow diagram.</p>';
-                    }
-                }
-            };
-
-            renderDiagram();
-        }
-    }, [steps, rejectionMode, resolvedTheme]); // Re-render when mode changes
-
-    const generateMermaidDefinition = (steps: any[]) => {
+    const generateMermaidDefinition = useCallback((steps: Step[]) => {
         const isDark = resolvedTheme === 'dark';
 
         // Define colors based on theme
@@ -162,7 +143,37 @@ export function FlowDiagram({ template, customSteps, rejectionMode = 'START' }: 
         });
 
         return defLines.join('\n');
-    };
+    }, [resolvedTheme, rejectionMode]);
+
+    useEffect(() => {
+        if (mermaidRef.current) {
+            // Clear previous content
+            mermaidRef.current.innerHTML = '<div class="flex items-center gap-2 text-muted-foreground animate-pulse"><small>Rendering Diagram...</small></div>';
+
+            if (!steps.length) {
+                if (mermaidRef.current) mermaidRef.current.innerHTML = '';
+                return;
+            }
+
+            const renderDiagram = async () => {
+                try {
+                    const definition = generateMermaidDefinition(steps);
+                    const id = `flowDiagram-${Math.random().toString(36).substr(2, 9)}`;
+                    const { svg } = await mermaid.render(id, definition);
+                    if (mermaidRef.current) {
+                        mermaidRef.current.innerHTML = svg;
+                    }
+                } catch (err) {
+                    console.error('Mermaid render error:', err);
+                    if (mermaidRef.current) {
+                        mermaidRef.current.innerHTML = '<p class="text-[10px] text-destructive italic">Failed to render flow diagram.</p>';
+                    }
+                }
+            };
+
+            renderDiagram();
+        }
+    }, [steps, rejectionMode, resolvedTheme, generateMermaidDefinition]); // Re-render when mode changes
 
     if (steps.length === 0) {
         return (

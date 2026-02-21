@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { Workflow } from 'lucide-react';
 
@@ -58,42 +58,13 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({ steps, transit
         });
     }, [resolvedTheme]);
 
-    useEffect(() => {
-        if (mermaidRef.current && steps.length > 0) {
-            // Clear previous content
-            mermaidRef.current.innerHTML = '<div class="flex items-center gap-2 text-muted-foreground animate-pulse"><small>Rendering Diagram...</small></div>';
-
-            try {
-                const diagramDefinition = generateMermaidDefinition(steps, transitions);
-                const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-
-                mermaid.render(id, diagramDefinition).then((result) => {
-                    if (mermaidRef.current) {
-                        mermaidRef.current.innerHTML = result.svg;
-                    }
-                }).catch(err => {
-                    console.error('Mermaid render error:', err);
-                    if (mermaidRef.current) {
-                        mermaidRef.current.innerHTML = '<p class="text-[10px] text-destructive italic">Failed to render process diagram.</p>';
-                    }
-                });
-            } catch (err) {
-                console.error('Mermaid definition error:', err);
-                if (mermaidRef.current) {
-                    mermaidRef.current.innerHTML = '<p class="text-[10px] text-destructive italic">Error generating diagram definition.</p>';
-                }
-            }
-        }
-    }, [steps, transitions, resolvedTheme]);
-
-    const generateMermaidDefinition = (steps: Step[], transitions: Transition[]) => {
+    const generateMermaidDefinition = useCallback((steps: Step[], transitions: Transition[]) => {
         const isDark = resolvedTheme === 'dark';
 
         // Define colors based on theme
         const colors = {
             completed: {
-                fill: isDark ? '#052e16' : '#0f172a', // Dark green/slate to match builder Start style? Or keep dark blue? Request diagram had dark blue.
-                // Let's keep dark blue for completed as per original
+                fill: isDark ? '#052e16' : '#0f172a',
                 stroke: isDark ? '#1e293b' : '#0f172a',
                 color: '#fff'
             },
@@ -103,7 +74,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({ steps, transit
                 color: isDark ? '#f8fafc' : '#0f172a'
             },
             pending: {
-                fill: isDark ? '#0f172a' : '#fff', // Dark bg for pending
+                fill: isDark ? '#0f172a' : '#fff',
                 stroke: isDark ? '#334155' : '#e2e8f0',
                 color: isDark ? '#94a3b8' : '#64748b'
             }
@@ -111,9 +82,8 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({ steps, transit
 
         const defLines = [
             'graph TD',
-            // Use array join method here too for safety
             `classDef completed fill:${colors.completed.fill},stroke:${colors.completed.stroke},color:${colors.completed.color},stroke-width:2px,rx:5px,ry:5px;`,
-            `classDef active fill:${colors.active.fill},stroke:${colors.active.stroke},color:${colors.active.color},stroke-width:2px,rx:5px,ry:5px;`, // Updated width 3->2 to match
+            `classDef active fill:${colors.active.fill},stroke:${colors.active.stroke},color:${colors.active.color},stroke-width:2px,rx:5px,ry:5px;`,
             `classDef pending fill:${colors.pending.fill},stroke:${colors.pending.stroke},color:${colors.pending.color},stroke-width:1px,stroke-dasharray: 5 5,rx:5px,ry:5px;`
         ];
 
@@ -148,7 +118,35 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({ steps, transit
         });
 
         return defLines.join('\n');
-    };
+    }, [resolvedTheme]);
+
+    useEffect(() => {
+        if (mermaidRef.current && steps.length > 0) {
+            // Clear previous content
+            mermaidRef.current.innerHTML = '<div class="flex items-center gap-2 text-muted-foreground animate-pulse"><small>Rendering Diagram...</small></div>';
+
+            try {
+                const diagramDefinition = generateMermaidDefinition(steps, transitions);
+                const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+
+                mermaid.render(id, diagramDefinition).then((result) => {
+                    if (mermaidRef.current) {
+                        mermaidRef.current.innerHTML = result.svg;
+                    }
+                }).catch(err => {
+                    console.error('Mermaid render error:', err);
+                    if (mermaidRef.current) {
+                        mermaidRef.current.innerHTML = '<p class="text-[10px] text-destructive italic">Failed to render process diagram.</p>';
+                    }
+                });
+            } catch (err) {
+                console.error('Mermaid definition error:', err);
+                if (mermaidRef.current) {
+                    mermaidRef.current.innerHTML = '<p class="text-[10px] text-destructive italic">Error generating diagram definition.</p>';
+                }
+            }
+        }
+    }, [steps, transitions, resolvedTheme, generateMermaidDefinition]);
 
     if (steps.length === 0) {
         return (
