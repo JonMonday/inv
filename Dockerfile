@@ -17,6 +17,10 @@ RUN dotnet publish InvServer.Api/InvServer.Api.csproj -c Release -o /app/publish
 # Run stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
-ENV ASPNETCORE_URLS=http://0.0.0.0:${PORT}
+
+ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+EXPOSE 8080
+
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "InvServer.Api.dll"]
+
