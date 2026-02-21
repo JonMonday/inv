@@ -92,6 +92,7 @@ builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 
 var app = builder.Build();
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 // Auto-Seed Database
 using (var scope = app.Services.CreateScope())
